@@ -1,0 +1,13 @@
+# Which faces are compiled into the firmware build.
+#
+# The `faces` list decides what is linked into the watch: a face that is not
+# listed here is left out of the binary entirely (its module is not compiled).
+# The watch boots into the first face in the list (simple_clock), so it is
+# always required. The emulator (`make -C emulator`) and the hardware
+# firmware are built from this same list.
+#
+# Available faces:
+#   simple_clock  - the time + date face (always required, the default)
+#   simple_alarm  - one Casio-style alarm, no weekdays
+#   alarm         - full alarm face, one alarm per weekday
+faces = ["simple_clock", "simple_alarm"]

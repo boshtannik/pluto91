@@ -26,9 +26,14 @@ case shown on the page.
 
 ## Faces (modes)
 
-The watch has two faces — **Time** and **Alarm**. A short **Mode** press
-switches between them. Each face keeps its state across switches: alarm
-settings survive leaving to Time and coming back.
+The watch has three faces — **Time**, **Alarm** and **Simple Alarm**. A short
+**Mode** press switches between them. Each face keeps its state across
+switches: alarm settings survive leaving to Time and coming back.
+
+> Which faces are present on a given build is set in
+> `crates/pluto-faces/faces.toml` — a face not listed there is left out of the
+> firmware and the emulator entirely (the default build has **Time** and
+> **Simple Alarm**).
 
 ---
 
@@ -54,7 +59,7 @@ Controls:
 - **Alarm** — a short beep and a toggle of the **12/24-hour format**
   (the H24 indicator).
 - **Light + hold** — backlight for ~3 seconds (turns off by itself).
-- **Mode** — switch to the Alarm face.
+- **Mode** — switch to the next face.
 
 ---
 
@@ -66,7 +71,7 @@ a state (on/off).
 ### View mode
 
 ```
- AL     count       HH:MM:SS
+ AL     count       HH:MM
         of enabled  current time (a live clock)
         alarms
 ```
@@ -79,7 +84,7 @@ Controls in the view mode:
 
 - **Alarm** — toggles the **hourly chime** (the SIG indicator).
 - **Light** — enter the alarm settings.
-- **Mode** — return to Time.
+- **Mode** — go to the next face.
 
 ### Settings
 
@@ -121,6 +126,70 @@ When an enabled alarm's time arrives, the watch **switches to the Alarm face
 by itself** (no matter what you were looking at) and rings. The ring lasts up
 to **2 minutes** or until you press any button. Switching the face with Mode
 also stops the ring.
+
+While the alarm rings, the face shows the **current time in full** (with
+seconds) and the **Bell indicator blinks** every half second.
+
+---
+
+## Simple Alarm face (SimpleAlarm)
+
+A classic Casio-style single alarm — no weekdays, just one time of day.
+
+### View mode
+
+```
+ AL            HH:MM
+               alarm time
+```
+
+- The **AL** letters mean this is the alarm face.
+- The alarm time is shown in the current 12/24-hour format, without a leading
+  zero (seconds are not shown).
+- The **Bell** indicator is on when the alarm is enabled.
+
+Controls in the view mode:
+
+- **Alarm** — turn the alarm on/off (the Bell indicator).
+- **Light** — enter the settings.
+- **Mode** — go to the next face.
+
+### Settings
+
+A short **Light** press in the view mode enters the settings. Fields advance
+in the order: **hours → minutes**. The selected field **blinks**; the display
+shows which field is being edited — `HO` (hours) or `MI` (minutes).
+
+| Action            | Result                                           |
+|-------------------|--------------------------------------------------|
+| **Light**         | go to the next field; on minutes — exit the settings |
+| **Light + hold**  | exit the settings (at any point)                 |
+| **Alarm**         | increase the value by 1                          |
+| **Alarm + double**| increase the value by 5                          |
+| **Alarm + hold**  | reset the value to 0                             |
+| **Alarm + Light** | set the alarm to the **current time**            |
+
+Nice touches:
+
+- On entering the settings a **never-configured** alarm (disabled, 00:00) is
+  automatically filled with the **current time** — handy when you want it to
+  go off "in a few minutes".
+- The **Alarm + Light** chord re-seeds the alarm with the current time from
+  anywhere; in the view mode it also opens the settings so you can nudge the
+  time right away.
+- While scrolling fast (hold), the value is shown steadily instead of
+  blinking so it stays readable; blinking resumes right after you stop.
+
+### Firing
+
+Same as the alarm face: when the time arrives the watch **switches to this
+face by itself** and rings up to **2 minutes** or until you press any button.
+The ring starts exactly at the top of the minute (HH:MM:00), so a freshly
+set alarm never rings in the middle of a minute.
+
+While the alarm rings, the face shows the **current time in full** (with
+seconds) and the **Bell indicator blinks** every half second; once the ring
+ends it goes back to the alarm time.
 
 ---
 

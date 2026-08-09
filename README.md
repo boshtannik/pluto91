@@ -10,7 +10,7 @@ The same logic (the `pluto-core` + `pluto-faces` crates) runs in two places:
 - **real board** (`pluto-hw` → MSP430) — firmware for a replacement F-91W board.
 
 ```
-                 pluto-faces (faces: SimpleClock, Alarm)
+                 pluto-faces (faces: choose them in faces.toml)
                         │  implement the Face trait
                  pluto-core (framework: Watch, Face, buttons, display)
                        ╱                 ╲
@@ -139,7 +139,7 @@ layout from `memory.x` (RAM 2 KB @ `0x1C00`, ROM ~46.8 KB @ `0x4400`).
 | Crate        | Path                  | What it is |
 |--------------|-----------------------|------------|
 | `pluto-core` | `crates/pluto-core`   | The framework: `no_std`, no dependencies. Traits, runtime, gestures, display, time |
-| `pluto-faces`| `crates/pluto-faces`  | The set of faces (watch programs): `SimpleClock`, `Alarm`; the `Faces` enum |
+| `pluto-faces`| `crates/pluto-faces`  | The set of faces (watch programs): `SimpleClock`, `Alarm`, `SimpleAlarm`; the `Faces` enum. Which ones are compiled is set by `faces.toml` |
 | `pluto-emu`  | `crates/pluto-emu`    | WASM bridge: `pluto_init` / `pluto_tick` / `pluto_button` + `js_*` imports |
 | `pluto-hw`   | `crates/pluto-hw`     | MSP430 firmware: main loop + LCD_C driver (standalone crate) |
 
@@ -161,6 +161,28 @@ The key idea: **faces are plain structs** implementing `trait Face`. They know
 nothing about the hardware or WASM; all access to the display and effects goes
 through `Hardware` (narrowed down to a concrete platform). That is why the same
 face works identically in the emulator and on the board.
+
+### Choosing which faces are built
+
+`crates/pluto-faces/faces.toml` decides which faces are compiled into the
+build:
+
+```toml
+# crates/pluto-faces/faces.toml
+faces = ["simple_clock", "simple_alarm"]
+```
+
+`simple_clock` is always required (it is the default face the watch boots
+into). Any face not listed is left out of the binary entirely: its module is
+not compiled, and the Mode cycle, the WASM build and the firmware all contain
+only the listed faces. The `build.rs` script reads this file and turns each
+listed face into a `face_*` cfg flag (`face_simple_clock`, `face_alarm`,
+`face_simple_alarm`) that gates the modules and enum variants in `lib.rs`.
+
+```sh
+make -C emulator    # rebuild the emulator with the new face set
+node tools/emu_test.mjs  # checks run only for the faces in the build
+```
 
 ### The F-91W glass and segment coordinates
 
@@ -332,10 +354,13 @@ impl Face for MyFace {
 
 In `crates/pluto-faces/src/lib.rs`:
 
-1. `mod my_face;` and `pub use my_face::MyFace;`
+1. `mod my_face;` and `pub use my_face::MyFace;`;
 2. add a variant to `enum Faces { SimpleClock(SimpleClock), Alarm(Alarm), MyFace(MyFace) }`;
 3. add the delegation to every method of `impl Face for Faces`;
-4. add an instance to `static ALL_FACES` (order = the Mode cycle order).
+4. add an instance to `static ALL_FACES` (order = the Mode cycle order);
+5. add `"my_face"` to the `faces` list in `crates/pluto-faces/faces.toml` and a
+   `("my_face", "face_my_face")` entry to the `KNOWN` table in
+   `crates/pluto-faces/build.rs`.
 
 ### 4. Check
 
@@ -364,9 +389,10 @@ Useful tricks:
 
 - `cargo test` — `pluto-core` unit tests (the `ButtonScanner` gestures, time,
   letters in `tests/letters.rs`).
-- `node tools/emu_test.mjs` — emulator integration checks (58 of them): they
-  build the WASM (`make -C emulator`), run press/tick scenarios and verify the
-  lit segments, the backlight and the buzzer.
+- `node tools/emu_test.mjs` — emulator integration checks: they build the
+  WASM (`make -C emulator`), run press/tick scenarios and verify the lit
+  segments, the backlight and the buzzer. The checks follow `faces.toml`: the
+  tests for a face run only when that face is in the build.
 
 ---
 

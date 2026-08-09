@@ -10,7 +10,7 @@
 - **реальная плата** (`pluto-hw` → MSP430) — прошивка для заменяющей платы F-91W.
 
 ```
-                 pluto-faces (фейсы: SimpleClock, Alarm)
+                 pluto-faces (фейсы: задаются в faces.toml)
                         │  реализуют trait Face
                  pluto-core (фреймворк: Watch, Face, кнопки, дисплей)
                        ╱                 ╲
@@ -133,7 +133,7 @@ mspdebug rf2500 'prog target/msp430-none-elf/release/pluto-hw'
 | Крейт           | Путь                     | Что это |
 |-----------------|--------------------------|---------|
 | `pluto-core`    | `crates/pluto-core`      | Фреймворк: `no_std`, без зависимостей. Traits, runtime, жесты, дисплей, время |
-| `pluto-faces`   | `crates/pluto-faces`     | Набор фейсов (программ часов): `SimpleClock`, `Alarm`; перечисление `Faces` |
+| `pluto-faces`   | `crates/pluto-faces`     | Набор фейсов (программ часов): `SimpleClock`, `Alarm`, `SimpleAlarm`; перечисление `Faces`. Какие из них попадают в сборку — задаётся в `faces.toml` |
 | `pluto-emu`     | `crates/pluto-emu`       | Мост в WASM: `pluto_init` / `pluto_tick` / `pluto_button` + импорты `js_*` |
 | `pluto-hw`      | `crates/pluto-hw`        | Прошивка MSP430: главный цикл + драйвер LCD_C (автономный крейт) |
 
@@ -155,6 +155,29 @@ pub mod watch;        // Watch<F>: runtime + FaceSet
 Они не знают ни о железе, ни о WASM; весь доступ к дисплею и эффектам идёт
 через `Hardware` (суженную до конкретной платформы). Поэтому один и тот же
 фейс одинаково работает в эмуляторе и на плате.
+
+### Какие фейсы попадают в сборку
+
+Файл `crates/pluto-faces/faces.toml` определяет, какие фейсы компилируются
+в прошивку:
+
+```toml
+# crates/pluto-faces/faces.toml
+faces = ["simple_clock", "simple_alarm"]
+```
+
+`simple_clock` обязателен всегда (это фейс по умолчанию, с которого часы
+стартуют). Фейс, которого нет в списке, полностью выпадает из бинарника: его
+модуль не компилируется, а цикл по Mode, сборка WASM и прошивка содержат
+только перечисленные фейсы. Скрипт `build.rs` читает этот файл и превращает
+каждый перечисленный фейс во флаг `face_*` (`face_simple_clock`,
+`face_alarm`, `face_simple_alarm`), которым в `lib.rs` закрыты модули и
+варианты перечисления.
+
+```sh
+make -C emulator    # пересобрать эмулятор с новым набором фейсов
+node tools/emu_test.mjs  # проверки идут только для фейсов из сборки
+```
 
 ### Стекло F-91W и координаты сегментов
 
@@ -327,10 +350,13 @@ impl Face for MyFace {
 
 В `crates/pluto-faces/src/lib.rs`:
 
-1. `mod my_face;` и `pub use my_face::MyFace;`
+1. `mod my_face;` и `pub use my_face::MyFace;`;
 2. добавьте вариант в `enum Faces { SimpleClock(SimpleClock), Alarm(Alarm), MyFace(MyFace) }`;
 3. добавьте делегирование во все методы `impl Face for Faces`;
-4. добавьте экземпляр в `static ALL_FACES` (порядок = порядок цикла по Mode).
+4. добавьте экземпляр в `static ALL_FACES` (порядок = порядок цикла по Mode);
+5. добавьте `"my_face"` в список `faces` в `crates/pluto-faces/faces.toml` и
+   запись `("my_face", "face_my_face")` в таблицу `KNOWN` в
+   `crates/pluto-faces/build.rs`.
 
 ### 4. Проверьте
 
@@ -359,9 +385,10 @@ make -C emulator && node tools/emu_test.mjs   # интеграционные п�
 
 - `cargo test` — юнит-тесты `pluto-core` (жесты `ButtonScanner`, время,
   буквы в `tests/letters.rs`).
-- `node tools/emu_test.mjs` — интеграционные проверки эмулятора (58 штук):
-  собирают WASM (`make -C emulator`), прогоняют сценарии нажатий/тиков и
-  сверяют зажжённые сегменты, подсветку и зуммер.
+- `node tools/emu_test.mjs` — интеграционные проверки эмулятора: собирают
+  WASM (`make -C emulator`), прогоняют сценарии нажатий/тиков и сверяют
+  зажжённые сегменты, подсветку и зуммер. Проверки следуют `faces.toml`:
+  тесты фейса идут только когда этот фейс есть в сборке.
 
 ---
 

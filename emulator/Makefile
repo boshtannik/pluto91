@@ -20,7 +20,7 @@ WASM_OUT = $(CURDIR)/../target/wasm32-unknown-unknown/release/pluto_emu.wasm
 
 all: $(TARGET) $(WASM)
 
-$(WASM): $(shell find $(EMU_CRATE)/src ../crates/pluto-core/src ../crates/pluto-faces/src -name '*.rs') ../display_map/display_map.rs ../display_map/letters.rs
+$(WASM): $(shell find $(EMU_CRATE)/src ../crates/pluto-core/src ../crates/pluto-faces/src -name '*.rs') ../crates/pluto-faces/build.rs ../crates/pluto-faces/faces.toml ../display_map/display_map.rs ../display_map/letters.rs
 	$(CARGO) build --release -p pluto-emu --target wasm32-unknown-unknown
 	mkdir -p $(BUILD)
 	cp $(WASM_OUT) $(WASM)

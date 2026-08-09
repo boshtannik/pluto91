@@ -13,7 +13,9 @@
 //! configured (disabled at 00:00) with the current wall-clock time as the
 //! base value; a configured alarm keeps its saved time. Pressing Alarm and
 //! Light together re-seeds the selected day with the current time. The status
-//! (AC) is shown as `ON` / `OF` in the seconds digits.
+//! (AC) is shown as `ON` / `OF` in the seconds digits. While an alarm rings the
+//! face shows the current time in full (with seconds) and blinks the Bell
+//! indicator at 2 Hz.
 
 use pluto_core::face::{ButtonId, ChordEvent, Face, FaceContext, GestureEvent, GestureKind};
 use pluto_core::font::{Indicator, FONT};
@@ -128,7 +130,9 @@ impl Alarm {
     /// base value for editing, but only if the alarm was never configured:
     /// an existing alarm (enabled or set to a time) keeps its saved time, so
     /// re-entering the edit mode does not clobber it. The user can force a
-    /// re-seed with the current time via the Alarm + Light chord.
+    /// re-seed with the current time via the Alarm + Light chord. Seconds are
+    /// dropped: the alarm fires at the top of the minute, never in the middle
+    /// of one.
     fn prime_from_now(&mut self, t: &pluto_core::time::DateTime) {
         let a = &mut self.alarms[self.day];
         if !a.enabled && a.hour == 0 && a.minute == 0 {
@@ -138,7 +142,8 @@ impl Alarm {
     }
 
     /// Unconditionally set the selected day's alarm to the current wall-clock
-    /// time (the Alarm + Light chord).
+    /// time (the Alarm + Light chord). Seconds are dropped, see
+    /// [`Self::prime_from_now`].
     fn seed_now(&mut self, t: &pluto_core::time::DateTime) {
         let a = &mut self.alarms[self.day];
         a.hour = t.hour;
@@ -220,8 +225,11 @@ impl Alarm {
         hw.set_digit(3, (n % 10) as u8);
         hw.clear_digit(2);
         // Live clock in the time digits (like SimpleClock), so the face is
-        // readable right after an alarm auto-switched it on.
+        // readable right after an alarm auto-switched it on. While the alarm
+        // rings the seconds are shown in full: the face is then a coherent
+        // "what time is it now" display.
         let t = ctx.time;
+        let ringing = self.ring_until.is_some();
         let hour = if ctx.h24 { t.hour } else { to_12h(t.hour) };
         if hour >= 10 {
             hw.set_digit(4, hour / 10);
@@ -231,9 +239,19 @@ impl Alarm {
         hw.set_digit(5, hour % 10);
         hw.set_digit(6, t.minute / 10);
         hw.set_digit(7, t.minute % 10);
-        hw.set_digit(8, t.second / 10);
-        hw.set_digit(9, t.second % 10);
-        hw.set_indicator(Indicator::Bell, n > 0);
+        if ringing {
+            hw.set_digit(8, t.second / 10);
+            hw.set_digit(9, t.second % 10);
+        } else {
+            // Seconds are hidden: an alarm face shows a time, not a ticking
+            // clock.
+            hw.clear_digit(8);
+            hw.clear_digit(9);
+        }
+        // The Bell indicator blinks at 2 Hz while the alarm rings, to draw
+        // the eye; otherwise it just reflects the enabled state.
+        let bell = if ringing { (t.ms / 500) % 2 == 0 } else { n > 0 };
+        hw.set_indicator(Indicator::Bell, bell);
         hw.set_indicator(Indicator::H24, ctx.h24);
         hw.set_indicator(Indicator::Pm, !ctx.h24 && t.hour >= 12);
         hw.set_indicator(Indicator::Signal, ctx.chime);
@@ -327,7 +345,11 @@ impl Face for Alarm {
         let day = t.weekday as u8;
         let a = &self.alarms[day as usize];
         let fired = (day, t.hour, t.minute);
-        if a.enabled && a.hour == t.hour && a.minute == t.minute {
+        // `t.second == 0` pins the ring to the top of the minute: the alarm
+        // starts exactly at HH:MM:00, never in the middle of a minute (a seed
+        // "from the current time" drops the seconds, so a freshly set alarm
+        // does not ring mid-minute).
+        if a.enabled && a.hour == t.hour && a.minute == t.minute && t.second == 0 {
             if self.last_fired != Some(fired) {
                 self.last_fired = Some(fired);
                 // Snap to view mode: an alarm firing interrupts whatever the

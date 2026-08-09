@@ -36,6 +36,14 @@ pub extern "C" fn pluto_init() {
     hw.clear_all();
 }
 
+/// Number of faces compiled into this build (depends on `faces.toml` in
+/// `pluto-faces`). Exported so the emulator page / tests can check which
+/// faces the wasm actually contains.
+#[no_mangle]
+pub extern "C" fn pluto_face_count() -> u32 {
+    <Faces as pluto_core::watch::FaceSet>::LEN as u32
+}
+
 /// Called periodically by the page; `ms` is milliseconds since the Unix epoch
 /// (used as the watch's wall clock).
 #[no_mangle]
