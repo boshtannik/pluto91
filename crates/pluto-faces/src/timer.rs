@@ -221,10 +221,9 @@ impl Timer {
         }
 
         let (hour, min, sec) = self.duration_parts();
-        // The edited hours always show their tens, so the maximum 23:59:59 is
-        // unambiguous while configuring.
-        hw.set_digit(4, hour / 10);
-        hw.set_digit(5, hour % 10);
+        // The edited hours always show their tens (so the maximum 23:59:59 is
+        // unambiguous while configuring) but blink like the other fields.
+        self.draw_pair(hw, 4, hour, field != TimerField::Hour || blink);
         self.draw_pair(hw, 6, min, field != TimerField::Min || blink);
         self.draw_pair(hw, 8, sec, field != TimerField::Sec || blink);
 

@@ -872,6 +872,13 @@ if (ORDER.includes('timer')) {
     && on.has('1,11') && on.has('0,11')                                   // O (pos1)
     && digitAt(4) === 0 && digitAt(5) === 0                               // hours 00 (tens shown)
     && digitAt(6) === 0 && digitAt(7) === 4);                             // minutes steady
+  // The hours field blinks too: hidden on the off phase (ms=250), well past
+  // the 750ms steady window of the last change.
+  ex.pluto_tick(t + 250);
+  on = onNow();
+  check('Timer edit: hours field blinks (hidden on the off phase)',
+    digitAt(4) === -1 && digitAt(5) === -1 && digitAt(6) === 0 && digitAt(7) === 4
+    && digitAt(8) === 0 && digitAt(9) === 0);
 
   // Hours step up to 23 and wrap to 00 (the 23:59:59 cap).
   for (let i = 0; i < 23; i++) pressAlarm();
