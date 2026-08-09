@@ -1,6 +1,6 @@
 # Pluto
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](README.ru.md) · [User manual](MANUAL.md)
 
 Firmware for a Casio F-91W-style wristwatch written in Rust.
 

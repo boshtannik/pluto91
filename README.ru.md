@@ -1,6 +1,6 @@
 # Pluto
 
-[English](README.md) · **Русский**
+[English](README.md) · **Русский** · [Инструкция пользователя](MANUAL.ru.md)
 
 Прошивка для наручных часов в стиле Casio F-91W, написанная на Rust.
 
