@@ -3,9 +3,11 @@
 //! The view mode shows `TI` in the weekday letters and the remaining time as
 //! HH:MM:SS (no leading zero on the hour, like the clock face). The **LAP**
 //! indicator is on while the countdown runs. The Alarm button starts / pauses
-//! it; a finished countdown (stopped at 00:00:00) restarts from the full
-//! duration. On the very first entry the timer is pre-set to the first preset
-//! (1 minute), so the face never greets you with a useless 00:00:00.
+//! it; a finished countdown (stopped at 00:00:00) is reset to the full
+//! duration on Alarm, and a second Alarm press starts it (a reset never
+//! auto-starts the countdown). On the very first entry the timer is pre-set to
+//! the first preset (1 minute), so the face never greets you with a useless
+//! 00:00:00.
 //!
 //! Light enters the settings: the fields are seconds -> minutes -> hours (Light
 //! advances, Alarm steps the value, a double adds 5, a hold resets to 0), like
@@ -24,6 +26,7 @@
 
 use pluto_core::face::{ButtonId, ChordEvent, Face, FaceContext, GestureEvent, GestureKind};
 use pluto_core::font::Indicator;
+use pluto_core::hardware::RING_BEEP;
 use pluto_core::{DigitDisplay, Hardware};
 
 /// How long a finished countdown keeps ringing (seconds), unless silenced by a
@@ -73,6 +76,10 @@ pub struct Timer {
     changed_at: Option<u64>,
     /// Epoch second at which the ring ends. `None` when not ringing.
     ring_until: Option<u64>,
+    /// Epoch second whose [`RING_BEEP`] melody is currently playing, so the
+    /// ring re-triggers the melody once per second (the stock F-91W cadence)
+    /// instead of on every 250 ms tick.
+    last_beep: Option<u64>,
 }
 
 impl Timer {
@@ -87,6 +94,7 @@ impl Timer {
             mode: TimerMode::View,
             changed_at: None,
             ring_until: None,
+            last_beep: None,
         }
     }
 
@@ -236,7 +244,7 @@ impl Timer {
 }
 
 impl Face for Timer {
-    fn init(&mut self, _ctx: &FaceContext, _hw: &mut impl Hardware) {
+    fn init(&mut self, _ctx: &FaceContext, hw: &mut impl Hardware) {
         // Entering the face always starts in the view mode and silences the
         // ring (a Mode exit from the middle of a ring or an edit session must
         // not resume either). An auto-switch when the countdown ends does NOT
@@ -246,6 +254,8 @@ impl Face for Timer {
         let was_editing = matches!(self.mode, TimerMode::Edit(_));
         self.mode = TimerMode::View;
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
         if was_editing && !self.running {
             self.remaining_ms = self.duration_ms;
         }
@@ -254,10 +264,20 @@ impl Face for Timer {
     fn tick(&mut self, ctx: &FaceContext, hw: &mut impl Hardware) {
         // Ring while inside the window; go silent once we pass it. Only the
         // active face ticks, so a ring dies the moment the user switches faces
-        // with Mode.
+        // with Mode. The ring melody re-triggers once per second (not on every
+        // tick).
         match self.ring_until {
-            Some(until) if ctx.time.secs < until => hw.beep(),
-            Some(_) => self.ring_until = None,
+            Some(until) if ctx.time.secs < until => {
+                if self.last_beep != Some(ctx.time.secs) {
+                    self.last_beep = Some(ctx.time.secs);
+                    hw.melody(&RING_BEEP);
+                }
+            }
+            Some(_) => {
+                self.ring_until = None;
+                self.last_beep = None;
+                hw.stop_melody();
+            }
             None => {}
         }
         match self.mode {
@@ -284,23 +304,25 @@ impl Face for Timer {
         false
     }
 
-    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, _hw: &mut impl Hardware) -> bool {
+    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, hw: &mut impl Hardware) -> bool {
         // Any button press silences the ring (the stock Casio behaviour).
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
         let now_ms = ctx.time.secs as u64 * 1000 + ctx.time.ms as u64;
         match event.button {
             ButtonId::Alarm => match self.mode {
                 // In the view mode Alarm starts / pauses the countdown; a
-                // finished countdown (stopped at 00:00:00) restarts from the
-                // full duration.
+                // finished countdown (stopped at 00:00:00) is reset to the
+                // full duration and stays paused — a second Alarm press
+                // starts it.
                 TimerMode::View => {
                     if event.kind == GestureKind::Press {
                         if self.running {
                             self.running = false;
+                        } else if self.remaining_ms == 0 {
+                            self.remaining_ms = self.duration_ms;
                         } else {
-                            if self.remaining_ms == 0 {
-                                self.remaining_ms = self.duration_ms;
-                            }
                             self.running = true;
                             self.last_tick_ms = now_ms;
                         }

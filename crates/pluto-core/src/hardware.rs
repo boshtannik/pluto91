@@ -13,6 +13,18 @@ pub struct Note {
 /// Maximum number of notes a [`Hardware::melody`] can play in one call.
 pub const MAX_MELODY_NOTES: usize = 64;
 
+/// The stock Casio ring cadence, shared by every ringing face (the two alarm
+/// faces and the timer): two 100 ms beeps — the second one starts 250 ms after
+/// the first — then silence, a one-second pattern. A face re-triggers this
+/// melody once per second (tracked via its `last_beep` field) for the whole
+/// ring, so the beep phase does not depend on when the 250 ms tick lands.
+pub const RING_BEEP: [Note; 4] = [
+    Note { freq_hz: 2400, ms: 100 },
+    Note { freq_hz: 0, ms: 150 },
+    Note { freq_hz: 2400, ms: 100 },
+    Note { freq_hz: 0, ms: 650 },
+];
+
 /// The platform the face runs on: a [`Display`] plus non-display
 /// peripherals.
 ///

@@ -125,7 +125,9 @@ Nice touches:
 When an enabled alarm's time arrives, the watch **switches to the Alarm face
 by itself** (no matter what you were looking at) and rings. The ring lasts up
 to **2 minutes** or until you press any button. Switching the face with Mode
-also stops the ring.
+also stops the ring. The ring **beeps twice per second**: two 100 ms beeps
+(the second starts 250 ms after the first), then silence until the next second
+— the stock F-91W cadence.
 
 While the alarm rings, the face shows the **current time in full** (with
 seconds) and the **Bell indicator blinks** every half second.
@@ -185,7 +187,9 @@ Nice touches:
 Same as the alarm face: when the time arrives the watch **switches to this
 face by itself** and rings up to **2 minutes** or until you press any button.
 The ring starts exactly at the top of the minute (HH:MM:00), so a freshly
-set alarm never rings in the middle of a minute.
+set alarm never rings in the middle of a minute. The ring **beeps twice per
+second**: two 100 ms beeps (the second starts 250 ms after the first), then
+silence until the next second — the stock F-91W cadence.
 
 While the alarm rings, the face shows the **current time in full** (with
 seconds) and the **Bell indicator blinks** every half second; once the ring
@@ -216,7 +220,8 @@ and rings when it reaches zero.
 Controls in the view mode:
 
 - **Alarm** — start / pause the countdown. When it is stopped at 00:00:00
-  (after a finished run) it starts it again from the full duration.
+  (after a finished run) the first press resets it to the full duration
+  (paused); press **Alarm** again to start it.
 - **Light** — enter the settings.
 - **Mode** — go to the next face.
 
@@ -262,8 +267,11 @@ stop just because you switched to the clock.
 When the countdown reaches zero the watch **switches to the Timer face by
 itself** (no matter what you were looking at) and rings. The ring lasts up to
 **2 minutes** or until you press any button; the face shows **00:00:00** and
-the **Bell indicator blinks** every half second. Once the ring ends the timer
-stays at 00:00:00; press **Alarm** to run the same duration again.
+the **Bell indicator blinks** every half second. The ring **beeps twice per
+second** (two 100 ms beeps, the second starting 250 ms after the first — the
+same cadence as the alarms). Once the ring ends the timer stays at 00:00:00;
+press **Alarm** to reset it to the full duration (paused), and press **Alarm**
+again to run it.
 
 ---
 

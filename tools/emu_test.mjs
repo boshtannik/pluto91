@@ -314,22 +314,22 @@ if (ORDER.includes('alarm')) {
   // --- alarm fires at Mon 07:05 (2026-08-10 is a Monday) ---
   const nFired = beeps.length;
   ex.pluto_tick(Date.UTC(2026, 7, 10, 7, 5, 0));
-  check('alarm beeps when time matches', beeps.length === nFired + 1);
+  check('alarm beeps when time matches', beeps.length === nFired + 2);
   ex.pluto_tick(Date.UTC(2026, 7, 10, 7, 5, 30)); // still within the ring window
-  check('ringing continues within the minute', beeps.length === nFired + 2);
+  check('ringing continues within the minute', beeps.length === nFired + 4);
   ex.pluto_tick(Date.UTC(2026, 7, 10, 7, 7, 0)); // exactly 2 minutes after firing
-  check('ringing auto-stops after 2 minutes', beeps.length === nFired + 2);
+  check('ringing auto-stops after 2 minutes', beeps.length === nFired + 4);
   ex.pluto_tick(Date.UTC(2026, 7, 11, 7, 5, 0)); // Tue has no alarm enabled
-  check('disabled weekday does not fire', beeps.length === nFired + 2);
+  check('disabled weekday does not fire', beeps.length === nFired + 4);
   ex.pluto_tick(Date.UTC(2026, 7, 17, 7, 5, 0)); // next Monday again -> fires
   const nRing = beeps.length;
-  check('alarm re-fires on a later week', beeps.length === nFired + 3);
+  check('alarm re-fires on a later week', beeps.length === nFired + 6);
   ex.pluto_tick(Date.UTC(2026, 7, 17, 7, 5, 30)); // still ringing
   press(2); // any button silences the ringing
   ex.pluto_tick(Date.UTC(2026, 7, 17, 7, 5, 31));
-  check('any button stops the ringing', beeps.length === nRing + 1);
+  check('any button stops the ringing', beeps.length === nRing + 2);
   ex.pluto_tick(Date.UTC(2026, 7, 17, 7, 5, 32));
-  check('ringing does not resume after button stop', beeps.length === nRing + 1);
+  check('ringing does not resume after button stop', beeps.length === nRing + 2);
 
   // --- Mode exit from the middle of an edit resets the face to view ---
   // Monday is currently seeded to 09:37 (by the chord above); set it back to
@@ -363,18 +363,18 @@ if (ORDER.includes('alarm')) {
     && on.has('1,7') && on.has('2,7') && !on.has('0,7')                 // count 01
     && on.has('0,16')                                                   // Bell (blink on)
     && on.has('0,4') && on.has('2,4'));                                 // ring: seconds 00
-  check('auto-switch rings', beeps.length === nAuto + 1);
+  check('auto-switch rings', beeps.length === nAuto + 2);
   ex.pluto_tick(Date.UTC(2026, 7, 31, 7, 5, 1)); // still ringing
-  check('auto-switched ring continues', beeps.length === nAuto + 2);
+  check('auto-switched ring continues', beeps.length === nAuto + 4);
   ex.pluto_tick(Date.UTC(2026, 7, 31, 7, 5, 1, 600)); // still ringing, ms=600
   check('Alarm Bell blinks off at 500ms into the second',
-    !onNow().has('0,16') && beeps.length === nAuto + 3);
+    !onNow().has('0,16') && beeps.length === nAuto + 4);
   press(2); // Alarm button (no-op in view) silences it
   ex.pluto_tick(Date.UTC(2026, 7, 31, 7, 5, 2));
-  check('auto-switched ring stops on button', beeps.length === nAuto + 3);
+  check('auto-switched ring stops on button', beeps.length === nAuto + 4);
   ex.pluto_tick(Date.UTC(2026, 7, 31, 7, 5, 3));
   check('no resume after stop (and still on Alarm view)',
-    beeps.length === nAuto + 3 && onNow().has('0,13') && onNow().has('2,11'));
+    beeps.length === nAuto + 4 && onNow().has('0,13') && onNow().has('2,11'));
 
   // --- editing: never-configured alarms start from "now"; configured ones keep ---
   // --- their time; Alarm + Light together re-seed with the current time ---
@@ -599,9 +599,9 @@ if (ORDER.includes('simple_alarm')) {
   const nSAF = beeps.length;
   ex.pluto_tick(Date.UTC(2026, 8, 2, 2, 5, 0));
   faceIdx = idx('simple_alarm'); // the watch auto-switched to the ringing face
-  check('SimpleAlarm fires and auto-switches', beeps.length === nSAF + 1);
+  check('SimpleAlarm fires and auto-switches', beeps.length === nSAF + 2);
   ex.pluto_tick(Date.UTC(2026, 8, 2, 2, 5, 30));
-  check('SimpleAlarm ring continues within the minute', beeps.length === nSAF + 2);
+  check('SimpleAlarm ring continues within the minute', beeps.length === nSAF + 4);
   ex.pluto_tick(Date.UTC(2026, 8, 2, 2, 6, 30)); // still ringing (window to 02:07)
   on = onNow();
   check('SimpleAlarm ring shows the current time in full (02:06:30)',
@@ -612,9 +612,9 @@ if (ORDER.includes('simple_alarm')) {
     && on.has('0,16'));                                  // Bell blinks on (ms<500)
   ex.pluto_tick(Date.UTC(2026, 8, 2, 2, 6, 30, 600)); // still ringing, ms=600
   check('SimpleAlarm Bell blinks off at 500ms into the second',
-    !onNow().has('0,16') && beeps.length === nSAF + 4);
+    !onNow().has('0,16') && beeps.length === nSAF + 6);
   ex.pluto_tick(Date.UTC(2026, 8, 2, 2, 7, 0));
-  check('SimpleAlarm ring auto-stops after 2 minutes', beeps.length === nSAF + 4);
+  check('SimpleAlarm ring auto-stops after 2 minutes', beeps.length === nSAF + 6);
   on = onNow();
   check('SimpleAlarm back on view after the ring (alarm 02:05, seconds hidden)',
     on.has('0,13') && on.has('2,13') && on.has('1,15')
@@ -656,7 +656,7 @@ if (ORDER.includes('simple_alarm')) {
   ex.pluto_tick(Date.UTC(2026, 8, 2, 15, 38, 0));
   faceIdx = idx('simple_alarm'); // auto-switched to the ringing face
   check('SimpleAlarm auto-switches and fires at the top of the minute',
-    beeps.length === nSAF2 + 1);
+    beeps.length === nSAF2 + 2);
   on = onNow();
   check('SimpleAlarm auto-switch view (AL + Bell)',
     on.has('0,13') && on.has('2,13') && on.has('1,15')
@@ -733,25 +733,40 @@ if (ORDER.includes('timer')) {
     on.has('0,13') && on.has('1,14') && on.has('0,16')
     && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
     && digitAt(8) === 0 && digitAt(9) === 0 && !on.has('1,10')
-    && beeps.length === nRing + 1);
-  // Bell blinks at 2 Hz: off 500ms into the second.
+    && beeps.length === nRing + 2);
+  // Bell blinks at 2 Hz: off 500ms into the second (same second -> no beep).
   ex.pluto_tick(t + 600); // ms=600
   check('Timer: Bell blinks at 2Hz during the ring',
     !onNow().has('0,16') && beeps.length === nRing + 2);
+  // The ring re-triggers the beep-beep melody once per second (the F-91W
+  // cadence), not on every tick.
+  ex.pluto_tick(t + 1000); // next second
+  check('Timer: ring re-beeps once per second', beeps.length === nRing + 4);
+  ex.pluto_tick(t + 1250); // 250ms later, same second -> no re-trigger
+  check('Timer: ring does not re-beep within the same second',
+    beeps.length === nRing + 4);
   // The ring auto-stops after 120 seconds.
   t += 130000;
   ex.pluto_tick(t);
   on = onNow();
   check('Timer: ring auto-stops after 120s',
-    beeps.length === nRing + 2 && !on.has('0,16')
+    beeps.length === nRing + 4 && !on.has('0,16')
     && digitAt(8) === 0 && digitAt(9) === 0);
-  // Alarm after the ring restarts the same duration from the top.
+  // Alarm after the ring resets the finished countdown to 3:00 but stays
+  // paused; a second Alarm press starts it.
   press(2);
   ex.pluto_tick(t);
   on = onNow();
-  check('Timer: Alarm restarts the finished countdown (3:00, LAP on)',
-    on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3
-    && digitAt(8) === 0 && digitAt(9) === 0 && beeps.length === nRing + 2);
+  check('Timer: Alarm resets the finished countdown (3:00, LAP off)',
+    !on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3
+    && digitAt(8) === 0 && digitAt(9) === 0 && beeps.length === nRing + 4);
+  press(2);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: a second Alarm press starts the reset countdown (LAP on)',
+    on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3);
+  press(2); // pause again before the preset cycle
+  ex.pluto_tick(t);
 
   // --- preset cycle: 1 -> 3 -> 5 -> ... -> 60 -> 1 ---
   // (the current preset is 3, so the next chords step 5,7,...,60,1,3)
@@ -784,10 +799,16 @@ if (ORDER.includes('timer')) {
     on.has('0,13') && on.has('1,14') && on.has('0,16')
     && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
     && digitAt(8) === 0 && digitAt(9) === 0
-    && beeps.length === nBack + 1);
+    && beeps.length === nBack + 2);
 
-  // Any button press silences the ring; in the view Alarm also restarts.
-  press(2); // silence + restart running at 3:00
+  // Any button press silences the ring; in the view Alarm then resets the
+  // finished countdown to 3:00 (paused) — it never auto-starts.
+  press(2); // silence + reset to 3:00, paused
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: reset after ring stays paused (LAP off)',
+    !on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3);
+  press(2); // start again
   ex.pluto_tick(t);
   press(2); // pause again for the settings tests
   ex.pluto_tick(t);

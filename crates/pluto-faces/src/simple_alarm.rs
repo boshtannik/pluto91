@@ -13,6 +13,7 @@
 
 use pluto_core::face::{ButtonId, ChordEvent, Face, FaceContext, GestureEvent, GestureKind};
 use pluto_core::font::Indicator;
+use pluto_core::hardware::RING_BEEP;
 use pluto_core::{DigitDisplay, Hardware};
 
 /// How long a fired alarm keeps ringing (seconds), unless silenced by a
@@ -61,6 +62,10 @@ pub struct SimpleAlarm {
     last_fired: Option<(u8, u8)>,
     /// Seconds-of-day at which the ring ends. `None` when not ringing.
     ring_until: Option<u32>,
+    /// Seconds-of-day whose [`RING_BEEP`] melody is currently playing, so the
+    /// ring re-triggers the melody once per second (the stock F-91W cadence)
+    /// instead of on every 250 ms tick.
+    last_beep: Option<u32>,
 }
 
 impl SimpleAlarm {
@@ -73,6 +78,7 @@ impl SimpleAlarm {
             changed_at: None,
             last_fired: None,
             ring_until: None,
+            last_beep: None,
         }
     }
 
@@ -211,23 +217,35 @@ impl SimpleAlarm {
 }
 
 impl Face for SimpleAlarm {
-    fn init(&mut self, _ctx: &FaceContext, _hw: &mut impl Hardware) {
+    fn init(&mut self, _ctx: &FaceContext, hw: &mut impl Hardware) {
         // Entering the face always starts in the view mode. The ring is also
         // silenced: an auto-switch (when the alarm fires) does NOT call init,
         // so the ring survives that path.
         self.mode = SimpleAlarmMode::View;
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
     }
 
     fn tick(&mut self, ctx: &FaceContext, hw: &mut impl Hardware) {
         // Ring while inside the window; go silent once we pass it. Only the
         // active face ticks, so a ring dies the moment the user switches faces
-        // with Mode.
+        // with Mode. The ring melody re-triggers once per second (not on every
+        // tick).
         let t = ctx.time;
         let secs = t.hour as u32 * 3600 + t.minute as u32 * 60 + t.second as u32;
         match self.ring_until {
-            Some(until) if secs < until => hw.beep(),
-            Some(_) => self.ring_until = None,
+            Some(until) if secs < until => {
+                if self.last_beep != Some(secs) {
+                    self.last_beep = Some(secs);
+                    hw.melody(&RING_BEEP);
+                }
+            }
+            Some(_) => {
+                self.ring_until = None;
+                self.last_beep = None;
+                hw.stop_melody();
+            }
             None => {}
         }
         match self.mode {
@@ -259,9 +277,11 @@ impl Face for SimpleAlarm {
         false
     }
 
-    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, _hw: &mut impl Hardware) -> bool {
+    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, hw: &mut impl Hardware) -> bool {
         // Any button press silences the ring (the stock Casio behaviour).
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
         match event.button {
             ButtonId::Alarm => {
                 match self.mode {

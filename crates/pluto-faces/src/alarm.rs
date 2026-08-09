@@ -19,6 +19,7 @@
 
 use pluto_core::face::{ButtonId, ChordEvent, Face, FaceContext, GestureEvent, GestureKind};
 use pluto_core::font::{Indicator, FONT};
+use pluto_core::hardware::RING_BEEP;
 use pluto_core::{DigitDisplay, Hardware};
 
 /// Two-letter weekday abbreviations, indexed by `DateTime::weekday`
@@ -97,6 +98,10 @@ pub struct Alarm {
     /// When the currently ringing alarm should go silent: `(weekday,
     /// seconds-of-day)` at which the ring ends. `None` when not ringing.
     ring_until: Option<(u8, u32)>,
+    /// Seconds-of-day of the last ring beep, so the ring re-triggers the
+    /// [`RING_BEEP`] melody once per second (the stock F-91W cadence) instead
+    /// of on every 250 ms tick.
+    last_beep: Option<u32>,
     /// Epoch ms of the last change of the edited value, to suppress blinking
     /// while the user is rapidly scrolling. `None` when unchanged.
     changed_at: Option<u64>,
@@ -114,6 +119,7 @@ impl Alarm {
             day: 0,
             last_fired: None,
             ring_until: None,
+            last_beep: None,
             changed_at: None,
         }
     }
@@ -314,24 +320,36 @@ impl Alarm {
 }
 
 impl Face for Alarm {
-    fn init(&mut self, _ctx: &FaceContext, _hw: &mut impl Hardware) {
+    fn init(&mut self, _ctx: &FaceContext, hw: &mut impl Hardware) {
         // Entering the face always starts in the view mode: a Mode exit from
         // the middle of an edit session must not resume the edit later. The
         // ring is also silenced: an auto-switch (when the alarm fires) does
         // NOT call init, so the ring survives that path.
         self.mode = AlarmMode::View;
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
     }
 
     fn tick(&mut self, ctx: &FaceContext, hw: &mut impl Hardware) {
         // Ring while inside the window; go silent once we pass it. Only the
         // active face ticks, so a ring dies the moment the user switches
-        // faces with Mode.
+        // faces with Mode. The ring melody re-triggers once per second (not
+        // on every tick).
         let t = ctx.time;
         let secs = t.hour as u32 * 3600 + t.minute as u32 * 60 + t.second as u32;
         match self.ring_until {
-            Some((wd, until)) if t.weekday as u8 == wd && secs < until => hw.beep(),
-            Some(_) => self.ring_until = None,
+            Some((wd, until)) if t.weekday as u8 == wd && secs < until => {
+                if self.last_beep != Some(secs) {
+                    self.last_beep = Some(secs);
+                    hw.melody(&RING_BEEP);
+                }
+            }
+            Some(_) => {
+                self.ring_until = None;
+                self.last_beep = None;
+                hw.stop_melody();
+            }
             None => {}
         }
         match self.mode {
@@ -365,9 +383,11 @@ impl Face for Alarm {
         false
     }
 
-    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, _hw: &mut impl Hardware) -> bool {
+    fn button(&mut self, event: GestureEvent, ctx: &FaceContext, hw: &mut impl Hardware) -> bool {
         // Any button press silences the ring (the stock Casio behaviour).
         self.ring_until = None;
+        self.last_beep = None;
+        hw.stop_melody();
         match event.button {
             ButtonId::Alarm => {
                 // In the edit mode everything is consumed here: the Alarm
