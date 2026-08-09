@@ -30,6 +30,15 @@ The watch has four faces — **Time**, **Alarm**, **Simple Alarm** and **Timer**
 A short **Mode** press switches between them. Each face keeps its state across
 switches: alarm settings and the timer survive leaving to Time and coming back.
 
+**Mode is contextual.** A face you *interacted with* (pressed a button on —
+e.g. started the timer, toggled the chime or entered the settings) returns to
+the **Time** face on the next Mode press instead of cycling to the next face;
+a face you only looked at cycles forward as usual. From the Time face Mode
+always cycles forward. The watch also returns to Time by itself after **42
+seconds** without any button press (0 disables this; it is configurable in
+code via `Watch::set_auto_home_secs`), so the clock always finds its way back
+home.
+
 > Which faces are present on a given build is set in
 > `crates/pluto-faces/faces.toml` — a face not listed there is left out of the
 > firmware and the emulator entirely (the default build has **Time**,

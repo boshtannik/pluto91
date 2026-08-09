@@ -25,6 +25,10 @@ pub trait FaceSet: Face + Copy + Default + 'static {
 /// How long the backlight stays on after the Light button is pressed.
 const BACKLIGHT_SECS: u64 = 3;
 
+/// Seconds without any button activity after which the watch returns to the
+/// clock face by itself (the stock pluto-fw "time to return home", 42 s).
+const AUTO_HOME_SECS: u64 = 42;
+
 /// The physical buttons, indexed like the per-button gesture scanners
 /// (`ButtonId` is `Light = 0, Mode = 1, Alarm = 2`).
 const BUTTON_IDS: [ButtonId; 3] = [ButtonId::Light, ButtonId::Mode, ButtonId::Alarm];
@@ -64,6 +68,19 @@ pub struct Watch<F: FaceSet> {
     /// The chord that is forming: `(first, second)` where `second` went down
     /// while `first` was still held. Delivered once both are released.
     pending_chord: Option<(ButtonId, ButtonId)>,
+    /// Whether the active face received an interaction (a Light/Alarm press,
+    /// double-click or chord) since it became active. A touched face returns
+    /// to the clock face on the next Mode press (the "contextual" Mode),
+    /// while a plain face cycles to the next one. Reset on every face change.
+    touched: bool,
+    /// Epoch second of the last button activity (any button, even a hold
+    /// auto-repeat). Compared against the wall clock in [`Watch::tick`] to
+    /// drive the auto-return to the clock face. `None` until the first press.
+    last_activity: Option<u64>,
+    /// Seconds without button activity after which the watch returns to the
+    /// clock face by itself. `0` disables the auto-return. Defaults to
+    /// [`AUTO_HOME_SECS`]; changeable via [`Watch::set_auto_home_secs`].
+    auto_home_secs: u64,
 }
 
 impl<F: FaceSet> Watch<F> {
@@ -79,7 +96,16 @@ impl<F: FaceSet> Watch<F> {
             pressed: [false; 3],
             press_delivered: [false; 3],
             pending_chord: None,
+            touched: false,
+            last_activity: None,
+            auto_home_secs: AUTO_HOME_SECS,
         }
+    }
+
+    /// Set the idle time (seconds) after which the watch returns to the clock
+    /// face by itself. `0` disables the auto-return.
+    pub fn set_auto_home_secs(&mut self, secs: u64) {
+        self.auto_home_secs = secs;
     }
 
     pub fn active_face(&self) -> F {
@@ -88,6 +114,20 @@ impl<F: FaceSet> Watch<F> {
 
     /// Periodic tick. `time` comes from the platform (RTC or emulator clock).
     pub fn tick(&mut self, time: DateTime, hw: &mut impl Hardware) {
+        // Auto-return to the clock face after `auto_home_secs` without any
+        // button activity (the stock pluto-fw "time to return home").
+        if self.auto_home_secs > 0 {
+            if let Some(last) = self.last_activity {
+                if time.secs.saturating_sub(last) >= self.auto_home_secs {
+                    self.last_activity = Some(time.secs);
+                    self.touched = false;
+                    if self.face_index != 0 {
+                        self.face_index = 0;
+                        hw.clear_all();
+                    }
+                }
+            }
+        }
         let ctx = FaceContext::new(time, self.h24, self.chime);
         if let Some(until) = self.backlight_until {
             if time.secs >= until {
@@ -116,6 +156,7 @@ impl<F: FaceSet> Watch<F> {
         }
         if let Some(i) = activate {
             self.face_index = i;
+            self.touched = false;
             hw.clear_all();
         }
         self.faces.as_mut()[self.face_index].tick(&ctx, hw);
@@ -142,6 +183,7 @@ impl<F: FaceSet> Watch<F> {
         let now = now_ms(time);
         let idx = id as usize;
         if down {
+            self.last_activity = Some(time.secs);
             if !self.pressed[idx] {
                 // A fresh press: clear the per-press flag, then check whether
                 // another button is already held (a chord in the making). The
@@ -185,6 +227,7 @@ impl<F: FaceSet> Watch<F> {
             self.scanners[second as usize].reset();
             if !self.pressed[first as usize] && !self.pressed[second as usize] {
                 self.pending_chord = None;
+                self.touched = true;
                 self.faces.as_mut()[self.face_index].chord(ChordEvent::new(first, second), &ctx, hw);
             }
         } else {
@@ -199,6 +242,9 @@ impl<F: FaceSet> Watch<F> {
     }
 
     fn dispatch(&mut self, event: GestureEvent, ctx: &FaceContext, hw: &mut impl Hardware) {
+        // Any delivered gesture counts as button activity (also a held
+        // button's auto-repeats, so a long scroll never trips the auto-home).
+        self.last_activity = Some(ctx.time.secs);
         match event.button {
             ButtonId::Mode => {
                 if event.kind == GestureKind::Press {
@@ -210,9 +256,13 @@ impl<F: FaceSet> Watch<F> {
                     hw.set_backlight(true);
                     self.backlight_until = Some(ctx.time.secs + BACKLIGHT_SECS);
                 }
+                // Any event delivered to the face marks it as interacted, so
+                // the next Mode press returns to the clock face.
+                self.touched = true;
                 self.faces.as_mut()[self.face_index].button(event, ctx, hw);
             }
             ButtonId::Alarm => {
+                self.touched = true;
                 // The face gets the event first; if it does not consume it, a
                 // plain press triggers the face's global Alarm action
                 // (12/24-hour format, or the hourly chime on the alarm face).
@@ -229,7 +279,15 @@ impl<F: FaceSet> Watch<F> {
     }
 
     fn cycle_face(&mut self, ctx: &FaceContext, hw: &mut impl Hardware) {
-        self.face_index = (self.face_index + 1) % F::LEN;
+        // A face that was interacted with returns to the clock face on Mode
+        // (instead of continuing the cycle); a plain face cycles to the next
+        // one. The clock face itself (index 0) always cycles forward.
+        if self.face_index != 0 && self.touched {
+            self.face_index = 0;
+        } else {
+            self.face_index = (self.face_index + 1) % F::LEN;
+        }
+        self.touched = false;
         hw.clear_all();
         self.faces.as_mut()[self.face_index].init(ctx, hw);
     }

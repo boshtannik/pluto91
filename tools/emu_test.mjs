@@ -16,6 +16,9 @@ const imports = { env: {
 const { instance } = await WebAssembly.instantiate(buf, imports);
 const ex = instance.exports;
 ex.pluto_init();
+// Deterministic tests: the idle auto-return to the clock face is exercised in
+// its own section at the end (enabled with pluto_set_auto_home).
+ex.pluto_set_auto_home(0);
 
 // Which faces this build contains: read faces.toml (the same file build.rs
 // turns into cfg flags), then verify the wasm matches.
@@ -77,38 +80,55 @@ const digitAt = (pos) => {
 // the gesture scanner never mistakes them for a double-click.
 const press = (id) => {
   t += 2000;
-  ex.pluto_button(id, 1);
+  btn(id, 1);
   t += 2000;
-  ex.pluto_button(id, 0);
+  btn(id, 0);
 };
 // Light: one press then one hold auto-repeat (turns the backlight on).
 const holdLight = () => {
   t += 2000;
-  ex.pluto_button(0, 1); // Press
+  btn(0, 1); // Press
   t += 2000;
-  ex.pluto_button(0, 1); // Hold (>= HOLD_DELAY_MS)
+  btn(0, 1); // Hold (>= HOLD_DELAY_MS)
   t += 2000;
-  ex.pluto_button(0, 0);
+  btn(0, 0);
 };
 // Two buttons pressed together: `a` goes down, `b` follows within the chord
 // window, then both are released. The pair is delivered to the active face as
 // a chord instead of two separate presses.
 const chordPress = (a, b) => {
   t += 2000;
-  ex.pluto_button(a, 1); // first down (press held undelivered)
+  btn(a, 1); // first down (press held undelivered)
   t += 50;
-  ex.pluto_button(b, 1); // second down within the window -> chord
+  btn(b, 1); // second down within the window -> chord
   t += 2000;
-  ex.pluto_button(b, 0); // release second
+  btn(b, 0); // release second
   t += 2000;
-  ex.pluto_button(a, 0); // release first
+  btn(a, 0); // release first
 };
 
-// Mode presses cycle the active face; keep a mirror of the active index so
-// `goTo` can step the right number of presses regardless of the build's
-// face count. (An alarm firing auto-switches the face: sync `faceIdx` there.)
+// Mode presses cycle the active face; keep a mirror of the active index and of
+// the runtime's `touched` flag so `goTo` steps the right number of presses
+// regardless of the build's face count and the contextual-Mode behaviour
+// (a face that was interacted with returns to the clock face on Mode). (An
+// alarm firing auto-switches the face: sync `faceIdx` there, and remember the
+// runtime resets `touched` on every face change.)
+// Any delivered Light/Alarm gesture marks the active face as interacted, so
+// the next Mode press returns to the clock face. `btn` is the single entry
+// point for all button samples: it mirrors the runtime's `touched` flag on the
+// button-down (an event is always delivered afterwards).
+let touched = false; // mirror of Watch::touched
+const btn = (id, down) => {
+  ex.pluto_button(id, down);
+  if (down && id !== 1) touched = true;
+};
 let faceIdx = 0;
-const mode = () => { press(1); faceIdx = (faceIdx + 1) % ORDER.length; };
+const mode = () => {
+  press(1);
+  if (touched && faceIdx !== 0) faceIdx = 0;
+  else faceIdx = (faceIdx + 1) % ORDER.length;
+  touched = false;
+};
 const goTo = (name) => {
   for (let i = 0; i < ORDER.length; i++) {
     if (ORDER[faceIdx] === name) return;
@@ -201,25 +221,25 @@ if (ORDER.includes('alarm')) {
   const BLINK_ON  = 1_700_000_000_000; // ms in [0,250)   -> blinking field visible
   const BLINK_OFF = 1_700_000_000_250; // ms in [250,500) -> blinking field hidden
   const pressAlarm = () => {
-    t += 2000; ex.pluto_button(2, 1);
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1);
+    t += 2000; btn(2, 0);
   };
   const pressLight = () => {
-    t += 2000; ex.pluto_button(0, 1);
-    t += 2000; ex.pluto_button(0, 0);
+    t += 2000; btn(0, 1);
+    t += 2000; btn(0, 0);
   };
   // Alarm: a fast double press (second click within 400ms -> Double gesture).
   const doublePress = () => {
-    t += 2000; ex.pluto_button(2, 1); // Press (first click)
-    t += 100;  ex.pluto_button(2, 0); // release
-    t += 100;  ex.pluto_button(2, 1); // within 400ms -> Double
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1); // Press (first click)
+    t += 100;  btn(2, 0); // release
+    t += 100;  btn(2, 1); // within 400ms -> Double
+    t += 2000; btn(2, 0);
   };
   // Alarm: press then hold long enough for the auto-repeat to fire once.
   const holdAlarm = () => {
-    t += 2000; ex.pluto_button(2, 1); // Press -> +1
-    t += 2000; ex.pluto_button(2, 1); // Hold auto-repeat -> +1
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1); // Press -> +1
+    t += 2000; btn(2, 1); // Hold auto-repeat -> +1
+    t += 2000; btn(2, 0);
   };
 
   goTo('alarm'); // -> Alarm face again
@@ -460,12 +480,12 @@ if (ORDER.includes('alarm')) {
   t = Date.UTC(2026, 8, 1, 12, 0, 0);
   ex.pluto_tick(t);
   t += 2000;
-  ex.pluto_button(1, 1); // Mode down (fresh press, undelivered)
+  btn(1, 1); // Mode down (fresh press, undelivered)
   t += 2000;
-  ex.pluto_button(1, 1); // first Hold auto-repeat -> the hold's press -> cycle
+  btn(1, 1); // first Hold auto-repeat -> the hold's press -> cycle
   faceIdx = (faceIdx + 1) % ORDER.length; // cycled to the Alarm face
   t += 2000;
-  ex.pluto_button(1, 0); // release (held: no second cycle)
+  btn(1, 0); // release (held: no second cycle)
   ex.pluto_tick(t);
   on = onNow();
   check('hold Mode cycles to Alarm view (AL + SIG)',
@@ -476,16 +496,16 @@ if (ORDER.includes('alarm')) {
   // We are now on the Alarm view (chime on). Holding Light fires its press
   // (view -> edit -> back out via the hold) and the backlight; pressing Alarm
   // while Light is held must still be recognised as a chord.
-  ex.pluto_button(0, 1); // Light down
+  btn(0, 1); // Light down
   t += 2000;
-  ex.pluto_button(0, 1); // first Hold auto-repeat -> backlight on (+ press)
+  btn(0, 1); // first Hold auto-repeat -> backlight on (+ press)
   check('hold Light turns the backlight on', backlights.at(-1) === 1);
   t += 2000;
-  ex.pluto_button(2, 1); // Alarm down while Light is held -> chord (Light, Alarm)
+  btn(2, 1); // Alarm down while Light is held -> chord (Light, Alarm)
   t += 2000;
-  ex.pluto_button(2, 0); // release Alarm
+  btn(2, 0); // release Alarm
   t += 2000;
-  ex.pluto_button(0, 0); // release Light -> chord delivered (no-op in view)
+  btn(0, 0); // release Light -> chord delivered (no-op in view)
   ex.pluto_tick(t);
   on = onNow();
   check('chord after a Light hold is still delivered (AL view unchanged)',
@@ -502,14 +522,14 @@ if (ORDER.includes('alarm')) {
   pressLight();     // Light press -> edit mode (Day field)
   ex.pluto_tick(BLINK_ON);
   t += 2000;
-  ex.pluto_button(2, 1); // Alarm down
+  btn(2, 1); // Alarm down
   t += 50;
-  ex.pluto_button(0, 1); // Light down -> chord (Alarm, Light)
+  btn(0, 1); // Light down -> chord (Alarm, Light)
   t += 2000;             // Alarm's hold auto-repeat fires now; must be suppressed
   t += 2000;
-  ex.pluto_button(0, 0); // release Light
+  btn(0, 0); // release Light
   t += 2000;
-  ex.pluto_button(2, 0); // release Alarm -> chord re-seeds Monday 09:30
+  btn(2, 0); // release Alarm -> chord re-seeds Monday 09:30
   ex.pluto_tick(BLINK_ON);
   on = onNow();
   check('chord suppresses the held button repeat (Monday, 09:30)',
@@ -538,12 +558,12 @@ if (ORDER.includes('simple_alarm')) {
 
   const BLINK_ON  = 1_700_000_000_000; // ms in [0,250)   -> blinking field visible
   const pressAlarm = () => {
-    t += 2000; ex.pluto_button(2, 1);
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1);
+    t += 2000; btn(2, 0);
   };
   const pressLight = () => {
-    t += 2000; ex.pluto_button(0, 1);
-    t += 2000; ex.pluto_button(0, 0);
+    t += 2000; btn(0, 1);
+    t += 2000; btn(0, 0);
   };
 
   pressAlarm(); // view: Alarm toggles the alarm on
@@ -818,23 +838,23 @@ if (ORDER.includes('timer')) {
   const BLINK_ON  = 1_700_000_000_000; // ms in [0,250)   -> blinking field visible
   const BLINK_OFF = 1_700_000_000_250; // ms in [250,500) -> blinking field hidden
   const pressAlarm = () => {
-    t += 2000; ex.pluto_button(2, 1);
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1);
+    t += 2000; btn(2, 0);
   };
   const pressLight = () => {
-    t += 2000; ex.pluto_button(0, 1);
-    t += 2000; ex.pluto_button(0, 0);
+    t += 2000; btn(0, 1);
+    t += 2000; btn(0, 0);
   };
   const doublePress = () => {
-    t += 2000; ex.pluto_button(2, 1); // Press (first click)
-    t += 100;  ex.pluto_button(2, 0); // release
-    t += 100;  ex.pluto_button(2, 1); // within 400ms -> Double
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1); // Press (first click)
+    t += 100;  btn(2, 0); // release
+    t += 100;  btn(2, 1); // within 400ms -> Double
+    t += 2000; btn(2, 0);
   };
   const holdAlarm = () => {
-    t += 2000; ex.pluto_button(2, 1); // Press -> +1
-    t += 2000; ex.pluto_button(2, 1); // Hold auto-repeat -> reset
-    t += 2000; ex.pluto_button(2, 0);
+    t += 2000; btn(2, 1); // Press -> +1
+    t += 2000; btn(2, 1); // Hold auto-repeat -> reset
+    t += 2000; btn(2, 0);
   };
 
   // Light enters the settings; the running countdown is paused, SE label.
@@ -945,6 +965,55 @@ if (ORDER.includes('timer')) {
   check('Timer: hold Light exits the settings (view TI)',
     on.has('0,13') && on.has('1,14') && on.has('0,12') && on.has('1,12') && !on.has('2,13'));
 }
+
+// --- return to the clock face ---
+// Contextual Mode: a face that was interacted with (here: the Timer's edit
+// session, left by hold Light) goes straight to the clock on the next Mode
+// press instead of cycling onward.
+t = Date.UTC(2026, 8, 3, 15, 40, 0);
+mode(); // touched Timer -> clock face (day of month 03 in the top digits)
+ex.pluto_tick(t);
+on = onNow();
+check('contextual Mode returns to the clock face',
+  digitAt(3) === 3 && !on.has('1,10') && on.has('2,16'));
+
+// The clock face itself always cycles forward (there is nothing to go "home"
+// to), so Mode from the clock still steps to the next face...
+mode(); // -> SimpleAlarm
+ex.pluto_tick(t);
+on = onNow();
+check('Mode from the clock goes to the next face (AL, no day digits)',
+  on.has('2,11') && on.has('1,12') && digitAt(3) === -1);
+
+// ...and onward through an untouched face to the Timer.
+mode(); // -> Timer
+ex.pluto_tick(t);
+on = onNow();
+check('untouched face cycles onward (Timer TI)',
+  on.has('1,14') && !on.has('2,11') && !on.has('1,10'));
+
+// A face that was NOT interacted with keeps cycling on Mode (no jump home).
+mode(); // untouched Timer -> clock
+ex.pluto_tick(t);
+on = onNow();
+check('Mode without interaction keeps cycling (back on the clock)',
+  digitAt(3) === 3 && !on.has('1,10'));
+
+// --- idle auto-return: no buttons for `auto_home_secs` -> back to the clock ---
+ex.pluto_set_auto_home(3);
+mode(); // -> SimpleAlarm
+ex.pluto_tick(t);
+mode(); // -> Timer (untouched)
+ex.pluto_tick(t);
+on = onNow();
+check('on the Timer before the idle auto-return (TI)',
+  on.has('1,14') && !on.has('2,11') && !on.has('1,10'));
+ex.pluto_tick(t + 5000); // 5 s without buttons (>= auto_home_secs)
+faceIdx = 0; // the watch auto-returned to the clock face
+on = onNow();
+check('idle auto-return goes back to the clock face',
+  digitAt(3) === 3 && !on.has('1,10'));
+ex.pluto_set_auto_home(0);
 
 if (fail) process.exit(1);
 console.log('ALL OK');

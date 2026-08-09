@@ -44,6 +44,18 @@ pub extern "C" fn pluto_face_count() -> u32 {
     <Faces as pluto_core::watch::FaceSet>::LEN as u32
 }
 
+/// Set the idle time (seconds) after which the watch returns to the clock
+/// face by itself; `0` disables the auto-return. Exposed for the emulator
+/// page and tests.
+#[no_mangle]
+pub extern "C" fn pluto_set_auto_home(secs: u32) {
+    with_watch(|w| {
+        if let Some(watch) = w.as_mut() {
+            watch.set_auto_home_secs(secs as u64);
+        }
+    });
+}
+
 /// Called periodically by the page; `ms` is milliseconds since the Unix epoch
 /// (used as the watch's wall clock).
 #[no_mangle]
