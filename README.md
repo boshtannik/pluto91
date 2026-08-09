@@ -58,6 +58,28 @@ Board pin-out (`crates/pluto-hw/src/main.rs`, following the pluto-fw sources und
 
 The watch ticks every **250 ms** (`TICK_MS`); the emulator ticks at the same rate.
 
+### What else is on the board
+
+The Pluto board (original hardware repo:
+[carrotIndustries/pluto](https://github.com/carrotIndustries/pluto)) carries more
+than the MCU and the three buttons:
+
+| Peripheral | On the board | Used by this firmware |
+|------------|--------------|-----------------------|
+| **LCD** (F-91W glass) | LCD_C, 3-mux, charge pump | yes |
+| **Buzzer** | P7.3 + inductor boost (~10 mH) | GPIO stub only |
+| **Backlight** | LED on two GPIO pins (either orientation) | plain GPIO (no dimming) |
+| **RTC_C** | calendar RTC + calibration | no (time counts from boot) |
+| **Compass MAG3110** | bit-banged I²C, powered from a GPIO pin | no |
+| **IR receiver TSOP57338** | 38 kHz, powered from a GPIO pin | no |
+| **AES256** | hardware block in the MCU | no |
+| **SBW** | 2-wire programming/debug pads in the frame | — |
+
+The compass and the IR receiver are powered from GPIO pins so they draw 0 µA
+when unused. The buzzer boost circuit uses an inductor to raise the battery
+voltage for volume. Everything in the "not used yet" column is future work — see
+the TODO list in [`crates/pluto-hw/README.md`](crates/pluto-hw/README.md).
+
 > **`pluto-hw` status — WIP.** The crate is not part of the workspace and has
 > not been built on this machine yet: it needs nightly Rust with the
 > `msp430-none-elf` target and the TI linker `msp430-elf-gcc`. The RTC and
