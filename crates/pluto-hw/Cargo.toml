@@ -1,0 +1,19 @@
+[package]
+name = "pluto-hw"
+version = "0.1.0"
+edition = "2021"
+description = "Pluto firmware for the MSP430FR6972 replacement board"
+
+# Standalone crate (not part of the workspace): build from this directory
+# with the nightly MSP430 toolchain (see README.md).
+[workspace]
+
+[dependencies]
+pluto-core = { path = "../pluto-core" }
+pluto-faces = { path = "../pluto-faces" }
+msp430fr6972 = { version = "0.2", features = ["rt"] }
+msp430-rt = "0.2"
+
+[profile.release]
+lto = true
+opt-level = "s"

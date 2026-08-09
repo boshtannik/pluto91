@@ -1,0 +1,13 @@
+# Rust build output
+/target
+crates/pluto-hw/target
+legacy/target
+**/target
+**/*.rs.bk
+
+# Generated emulator page (make -C emulator)
+emulator/build
+
+# Editor / OS
+.DS_Store
+*.swp

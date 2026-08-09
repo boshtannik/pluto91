@@ -1,0 +1,13 @@
+[package]
+name = "pluto-emu"
+version = "0.1.0"
+edition = "2021"
+description = "Browser emulator for Pluto: the same firmware built to WASM"
+license = "GPL-3.0-only"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pluto-core = { path = "../pluto-core" }
+pluto-faces = { path = "../pluto-faces" }

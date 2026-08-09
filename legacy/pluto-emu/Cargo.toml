@@ -1,0 +1,12 @@
+[package]
+name = "pluto-emu"
+version = "0.1.0"
+edition = "2021"
+description = "Browser emulator for the pluto watch firmware"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pluto-core = { path = "../pluto-core" }
+pluto-apps = { path = "../pluto-apps" }

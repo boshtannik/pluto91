@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pluto-core",
+    "crates/pluto-faces",
+    "crates/pluto-emu",
+]
+
+# pluto-emu is no_std and only builds for wasm32-unknown-unknown (via
+# `make -C emulator`), where unwinding is not supported; it is therefore not
+# part of the default build.
+default-members = [
+    "crates/pluto-core",
+    "crates/pluto-faces",
+]
+
+# crates/pluto-hw is NOT a workspace member: it needs a nightly MSP430
+# toolchain and is built standalone from its own directory (see its README).
+
+[profile.release]
+lto = true
+opt-level = "s"

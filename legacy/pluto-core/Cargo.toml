@@ -1,0 +1,6 @@
+[package]
+name = "pluto-core"
+version = "0.1.0"
+edition = "2021"
+description = "Pluto watch framework: F-91W glass display, apps/views, menu, hardware traits"
+license = "GPL-3.0-or-later"

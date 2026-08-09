@@ -1,0 +1,8 @@
+[package]
+name = "pluto-core"
+version = "0.1.0"
+edition = "2021"
+description = "Pluto watch framework: traits for faces, display and the LCD glass"
+license = "GPL-3.0-only"
+
+[dependencies]

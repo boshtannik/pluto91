@@ -1,0 +1,9 @@
+[package]
+name = "pluto-faces"
+version = "0.1.0"
+edition = "2021"
+description = "Pluto faces (programs): the set of faces linked into the watch"
+license = "GPL-3.0-only"
+
+[dependencies]
+pluto-core = { path = "../pluto-core" }

@@ -1,0 +1,8 @@
+[package]
+name = "pluto-apps"
+version = "0.1.0"
+edition = "2021"
+description = "Pluto apps: launcher, time face, configuration menu"
+
+[dependencies]
+pluto-core = { path = "../pluto-core" }
