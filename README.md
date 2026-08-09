@@ -139,7 +139,7 @@ layout from `memory.x` (RAM 2 KB @ `0x1C00`, ROM ~46.8 KB @ `0x4400`).
 | Crate        | Path                  | What it is |
 |--------------|-----------------------|------------|
 | `pluto-core` | `crates/pluto-core`   | The framework: `no_std`, no dependencies. Traits, runtime, gestures, display, time |
-| `pluto-faces`| `crates/pluto-faces`  | The set of faces (watch programs): `SimpleClock`, `Alarm`, `SimpleAlarm`; the `Faces` enum. Which ones are compiled is set by `faces.toml` |
+| `pluto-faces`| `crates/pluto-faces`  | The set of faces (watch programs): `SimpleClock`, `Alarm`, `SimpleAlarm`, `Timer`; the `Faces` enum. Which ones are compiled is set by `faces.toml` |
 | `pluto-emu`  | `crates/pluto-emu`    | WASM bridge: `pluto_init` / `pluto_tick` / `pluto_button` + `js_*` imports |
 | `pluto-hw`   | `crates/pluto-hw`     | MSP430 firmware: main loop + LCD_C driver (standalone crate) |
 
@@ -169,7 +169,7 @@ build:
 
 ```toml
 # crates/pluto-faces/faces.toml
-faces = ["simple_clock", "simple_alarm"]
+faces = ["simple_clock", "simple_alarm", "timer"]
 ```
 
 `simple_clock` is always required (it is the default face the watch boots
@@ -177,7 +177,7 @@ into). Any face not listed is left out of the binary entirely: its module is
 not compiled, and the Mode cycle, the WASM build and the firmware all contain
 only the listed faces. The `build.rs` script reads this file and turns each
 listed face into a `face_*` cfg flag (`face_simple_clock`, `face_alarm`,
-`face_simple_alarm`) that gates the modules and enum variants in `lib.rs`.
+`face_simple_alarm`, `face_timer`) that gates the modules and enum variants in `lib.rs`.
 
 ```sh
 make -C emulator    # rebuild the emulator with the new face set

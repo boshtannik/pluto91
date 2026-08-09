@@ -33,7 +33,7 @@ for (const raw of facesText.split('\n')) {
 }
 if (!enabled.has('simple_clock')) throw new Error('faces.toml must always enable simple_clock');
 // Faces in FaceSet order: simple_clock first, then the config order.
-const ORDER = ['simple_clock', 'alarm', 'simple_alarm'].filter((f) => enabled.has(f));
+const ORDER = ['simple_clock', 'alarm', 'simple_alarm', 'timer'].filter((f) => enabled.has(f));
 const idx = (name) => ORDER.indexOf(name);
 if (ex.pluto_face_count() !== ORDER.length) {
   throw new Error(
@@ -43,6 +43,35 @@ if (ex.pluto_face_count() !== ORDER.length) {
 const onNow = () => new Set([...segs].filter(([,v]) => v).map(([k]) => k));
 let fail = 0;
 const check = (k, v) => { if (!v) fail++; console.log(v ? 'ok  ' : 'FAIL', k); };
+
+// 7-segment decoding helpers (mirror font.rs FONT / DIGIT_SEGS) so the timer
+// tests can read whole digits off the segment map instead of listing segments.
+const FONT = [
+  [[0,13],[1,13],[2,13],[2,15],[2,14],[0,14],[1,15]],
+  [[0,11],[1,11],[1,11],[2,11],[1,12],[1,12],[2,12]],
+  [[1,9],[0,9],[2,9],[1,9],[0,10],[-1,-1],[1,9]],
+  [[0,7],[1,7],[2,7],[2,6],[2,8],[0,8],[1,8]],
+  [[1,18],[2,19],[0,19],[1,18],[0,18],[2,18],[1,19]],
+  [[2,20],[2,21],[1,21],[0,21],[0,20],[1,17],[1,20]],
+  [[0,22],[2,23],[0,23],[0,22],[1,22],[2,22],[1,23]],
+  [[2,1],[2,10],[0,1],[0,0],[1,0],[2,0],[1,1]],
+  [[2,2],[2,3],[0,4],[0,3],[0,2],[1,2],[1,3]],
+  [[2,4],[2,5],[1,6],[0,6],[0,5],[1,4],[1,5]],
+];
+const DIGIT_SEGS = [0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f];
+// The digit currently drawn at a position, or -1 when it is blank.
+const digitAt = (pos) => {
+  for (let d = 0; d <= 9; d++) {
+    let ok = true;
+    for (let i = 0; i < 7; i++) {
+      const [com, seg] = FONT[pos][i];
+      if (com < 0) continue;
+      if (segs.get(`${com},${seg}`) !== (((DIGIT_SEGS[d] >> i) & 1) === 1)) { ok = false; break; }
+    }
+    if (ok) return d;
+  }
+  return -1;
+};
 
 // One press = down then up, with a large enough time gap between presses so
 // the gesture scanner never mistakes them for a double-click.
@@ -633,6 +662,260 @@ if (ORDER.includes('simple_alarm')) {
     on.has('0,13') && on.has('2,13') && on.has('1,15')
     && on.has('2,11') && on.has('1,12')
     && on.has('0,16'));
+}
+
+if (ORDER.includes('timer')) {
+  // --- Timer: Casio-style countdown (TI), presets via the Alarm+Light chord ---
+  goTo('timer'); // Mode -> Timer
+  t = Date.UTC(2026, 8, 3, 12, 0, 0);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer view: TI label, preset 1:00, LAP/Bell/H24/PM off',
+    on.has('0,13') && on.has('1,14')             // T (pos0)
+    && on.has('0,12') && on.has('1,12')          // I (pos1)
+    && !on.has('2,13')                           // not an S/M label
+    && digitAt(4) === -1                         // hour tens blank (hour 0)
+    && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 1
+    && digitAt(8) === 0 && digitAt(9) === 0
+    && !on.has('1,10') && !on.has('0,16') && !on.has('2,16') && !on.has('2,17'));
+
+  // Alarm + Light -> next preset (1 -> 3 minutes).
+  chordPress(2, 0);
+  t = Date.UTC(2026, 8, 3, 12, 0, 0);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: chord -> preset 3:00',
+    digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 3
+    && digitAt(8) === 0 && digitAt(9) === 0 && !on.has('1,10'));
+
+  // Alarm starts the countdown (LAP on).
+  press(2);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Alarm starts the countdown (LAP on, 3:00)',
+    on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3);
+
+  // 1s later -> 2:59.
+  t += 1000;
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: countdown decrements (2:59)',
+    digitAt(6) === 0 && digitAt(7) === 2 && digitAt(8) === 5 && digitAt(9) === 9);
+
+  // Alarm pauses (LAP off); the remaining time holds.
+  press(2);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Alarm pauses (LAP off)', !on.has('1,10'));
+  t += 5000; // 5s pass while paused
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: paused countdown holds its time (2:59)',
+    digitAt(6) === 0 && digitAt(7) === 2 && digitAt(8) === 5 && digitAt(9) === 9);
+
+  // Alarm resumes; the countdown continues from where it stopped.
+  press(2);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Alarm resumes (LAP on)', on.has('1,10'));
+  t += 2000;
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: countdown continues after resume (2:57)',
+    digitAt(6) === 0 && digitAt(7) === 2 && digitAt(8) === 5 && digitAt(9) === 7);
+
+  // Let it run to zero: the countdown fires a ring.
+  const nRing = beeps.length;
+  t += 177000; // exhaust the remaining 2:57
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: countdown fires a ring (00:00:00, Bell on, LAP off)',
+    on.has('0,13') && on.has('1,14') && on.has('0,16')
+    && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
+    && digitAt(8) === 0 && digitAt(9) === 0 && !on.has('1,10')
+    && beeps.length === nRing + 1);
+  // Bell blinks at 2 Hz: off 500ms into the second.
+  ex.pluto_tick(t + 600); // ms=600
+  check('Timer: Bell blinks at 2Hz during the ring',
+    !onNow().has('0,16') && beeps.length === nRing + 2);
+  // The ring auto-stops after 120 seconds.
+  t += 130000;
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: ring auto-stops after 120s',
+    beeps.length === nRing + 2 && !on.has('0,16')
+    && digitAt(8) === 0 && digitAt(9) === 0);
+  // Alarm after the ring restarts the same duration from the top.
+  press(2);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Alarm restarts the finished countdown (3:00, LAP on)',
+    on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3
+    && digitAt(8) === 0 && digitAt(9) === 0 && beeps.length === nRing + 2);
+
+  // --- preset cycle: 1 -> 3 -> 5 -> ... -> 60 -> 1 ---
+  // (the current preset is 3, so the next chords step 5,7,...,60,1,3)
+  const cycle = [5, 7, 10, 15, 20, 30, 40, 60, 1, 3];
+  for (const want of cycle) {
+    chordPress(2, 0);
+    t = Date.UTC(2026, 8, 3, 14, 0, 0);
+    ex.pluto_tick(t);
+    on = onNow();
+    check(`Timer: preset cycle -> ${want} min`,
+      digitAt(5) === Math.floor(want / 60) && digitAt(6) === Math.floor((want % 60) / 10)
+      && digitAt(7) === (want % 60) % 10
+      && digitAt(8) === 0 && digitAt(9) === 0);
+  }
+
+  // --- the countdown runs in the background on any face ---
+  press(2); // start
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: running again after the preset cycle (LAP on)',
+    on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3);
+  goTo('simple_clock'); // Mode -> SimpleClock; the timer keeps counting
+  ex.pluto_tick(t);
+  const nBack = beeps.length;
+  t = Date.UTC(2026, 8, 3, 14, 4, 0); // 4 minutes later, well past the 3:00
+  ex.pluto_tick(t); // the timer fires in the background -> auto-switch
+  faceIdx = idx('timer'); // the watch switched to the ringing timer
+  on = onNow();
+  check('Timer: fires from the background and auto-switches',
+    on.has('0,13') && on.has('1,14') && on.has('0,16')
+    && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
+    && digitAt(8) === 0 && digitAt(9) === 0
+    && beeps.length === nBack + 1);
+
+  // Any button press silences the ring; in the view Alarm also restarts.
+  press(2); // silence + restart running at 3:00
+  ex.pluto_tick(t);
+  press(2); // pause again for the settings tests
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: paused before editing', !on.has('1,10') && digitAt(6) === 0 && digitAt(7) === 3);
+
+  const BLINK_ON  = 1_700_000_000_000; // ms in [0,250)   -> blinking field visible
+  const BLINK_OFF = 1_700_000_000_250; // ms in [250,500) -> blinking field hidden
+  const pressAlarm = () => {
+    t += 2000; ex.pluto_button(2, 1);
+    t += 2000; ex.pluto_button(2, 0);
+  };
+  const pressLight = () => {
+    t += 2000; ex.pluto_button(0, 1);
+    t += 2000; ex.pluto_button(0, 0);
+  };
+  const doublePress = () => {
+    t += 2000; ex.pluto_button(2, 1); // Press (first click)
+    t += 100;  ex.pluto_button(2, 0); // release
+    t += 100;  ex.pluto_button(2, 1); // within 400ms -> Double
+    t += 2000; ex.pluto_button(2, 0);
+  };
+  const holdAlarm = () => {
+    t += 2000; ex.pluto_button(2, 1); // Press -> +1
+    t += 2000; ex.pluto_button(2, 1); // Hold auto-repeat -> reset
+    t += 2000; ex.pluto_button(2, 0);
+  };
+
+  // Light enters the settings; the running countdown is paused, SE label.
+  pressLight();
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: Light enters settings (SE label, seconds blink on)',
+    on.has('0,13') && on.has('2,13') && on.has('0,14')   // S (pos0)
+    && on.has('0,11') && on.has('2,11') && on.has('1,12') && on.has('2,12') // E (pos1)
+    && digitAt(6) === 0 && digitAt(7) === 3               // minutes steady
+    && digitAt(8) === 0 && digitAt(9) === 0               // seconds visible
+    && !on.has('1,10'));                                  // paused
+  ex.pluto_tick(BLINK_OFF);
+  on = onNow();
+  check('Timer edit: seconds field blinks (hidden on the off phase)',
+    digitAt(8) === -1 && digitAt(9) === -1 && digitAt(6) === 0 && digitAt(7) === 3);
+
+  // Alarm steps the seconds +1; double adds 5; hold resets to 0.
+  pressAlarm(); // sec 00 -> 01
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: Alarm steps seconds +1 (00:00:01)',
+    digitAt(8) === 0 && digitAt(9) === 1 && digitAt(6) === 0 && digitAt(7) === 3);
+  doublePress(); // 01 -> 02 -> 06
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: double press adds 5 to seconds (00:00:06)',
+    digitAt(8) === 0 && digitAt(9) === 6);
+  holdAlarm(); // +1 (06->07) then hold -> reset to 0
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: hold resets seconds to 0 (00:00:00)',
+    digitAt(8) === 0 && digitAt(9) === 0 && digitAt(6) === 0 && digitAt(7) === 3);
+
+  // Light advances to minutes (MI label).
+  pressLight(); // SE -> MI
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: MI label, minutes blink, seconds steady',
+    on.has('1,13') && on.has('2,14') && on.has('2,13')   // M (pos0)
+    && on.has('0,12') && on.has('1,12')                  // I (pos1)
+    && digitAt(6) === 0 && digitAt(7) === 3              // minutes visible
+    && digitAt(8) === 0 && digitAt(9) === 0);            // seconds steady
+  pressAlarm(); // minute 03 -> 04
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: minutes step +1 (00:04:00)',
+    digitAt(6) === 0 && digitAt(7) === 4 && digitAt(8) === 0 && digitAt(9) === 0);
+
+  // Light advances to hours (HO label).
+  pressLight(); // MI -> HO
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: HO label, hours blink, minutes steady',
+    on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,15') // H (pos0)
+    && on.has('1,11') && on.has('0,11')                                   // O (pos1)
+    && digitAt(4) === 0 && digitAt(5) === 0                               // hours 00 (tens shown)
+    && digitAt(6) === 0 && digitAt(7) === 4);                             // minutes steady
+
+  // Hours step up to 23 and wrap to 00 (the 23:59:59 cap).
+  for (let i = 0; i < 23; i++) pressAlarm();
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: hours step to 23',
+    digitAt(4) === 2 && digitAt(5) === 3 && digitAt(6) === 0 && digitAt(7) === 4);
+  pressAlarm(); // 23 -> 0
+  ex.pluto_tick(BLINK_ON);
+  on = onNow();
+  check('Timer edit: hours wrap 23 -> 00',
+    digitAt(4) === 0 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 4);
+
+  // Light on the hours field exits the settings and arms 4:00.
+  pressLight(); // HO -> exit
+  t = Date.UTC(2026, 8, 3, 15, 0, 0);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Light on hours exits the settings (view TI, armed 4:00)',
+    on.has('0,13') && on.has('1,14') && on.has('0,12') && on.has('1,12')
+    && !on.has('2,13')
+    && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 4
+    && digitAt(8) === 0 && digitAt(9) === 0 && !on.has('1,10'));
+
+  // Mode away from the middle of a settings session: returning resets to view.
+  pressLight(); // enter settings (SE)
+  ex.pluto_tick(BLINK_ON);
+  goTo('simple_clock'); // Mode -> SimpleClock (leaves the edit mid-way)
+  ex.pluto_tick(t);
+  goTo('timer'); // Mode x2 -> back to Timer
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: Mode exit from settings returns to view (TI)',
+    on.has('0,13') && on.has('1,14') && on.has('0,12') && on.has('1,12') && !on.has('2,13'));
+
+  // Hold Light exits the settings at any point.
+  pressLight(); // enter settings (SE)
+  ex.pluto_tick(BLINK_ON);
+  holdLight(); // hold Light -> exit (and backlight)
+  t = Date.UTC(2026, 8, 3, 15, 30, 0);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Timer: hold Light exits the settings (view TI)',
+    on.has('0,13') && on.has('1,14') && on.has('0,12') && on.has('1,12') && !on.has('2,13'));
 }
 
 if (fail) process.exit(1);

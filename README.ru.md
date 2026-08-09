@@ -133,7 +133,7 @@ mspdebug rf2500 'prog target/msp430-none-elf/release/pluto-hw'
 | Крейт           | Путь                     | Что это |
 |-----------------|--------------------------|---------|
 | `pluto-core`    | `crates/pluto-core`      | Фреймворк: `no_std`, без зависимостей. Traits, runtime, жесты, дисплей, время |
-| `pluto-faces`   | `crates/pluto-faces`     | Набор фейсов (программ часов): `SimpleClock`, `Alarm`, `SimpleAlarm`; перечисление `Faces`. Какие из них попадают в сборку — задаётся в `faces.toml` |
+| `pluto-faces`   | `crates/pluto-faces`     | Набор фейсов (программ часов): `SimpleClock`, `Alarm`, `SimpleAlarm`, `Timer`; перечисление `Faces`. Какие из них попадают в сборку — задаётся в `faces.toml` |
 | `pluto-emu`     | `crates/pluto-emu`       | Мост в WASM: `pluto_init` / `pluto_tick` / `pluto_button` + импорты `js_*` |
 | `pluto-hw`      | `crates/pluto-hw`        | Прошивка MSP430: главный цикл + драйвер LCD_C (автономный крейт) |
 
@@ -163,7 +163,7 @@ pub mod watch;        // Watch<F>: runtime + FaceSet
 
 ```toml
 # crates/pluto-faces/faces.toml
-faces = ["simple_clock", "simple_alarm"]
+faces = ["simple_clock", "simple_alarm", "timer"]
 ```
 
 `simple_clock` обязателен всегда (это фейс по умолчанию, с которого часы
@@ -171,8 +171,8 @@ faces = ["simple_clock", "simple_alarm"]
 модуль не компилируется, а цикл по Mode, сборка WASM и прошивка содержат
 только перечисленные фейсы. Скрипт `build.rs` читает этот файл и превращает
 каждый перечисленный фейс во флаг `face_*` (`face_simple_clock`,
-`face_alarm`, `face_simple_alarm`), которым в `lib.rs` закрыты модули и
-варианты перечисления.
+`face_alarm`, `face_simple_alarm`, `face_timer`), которым в `lib.rs` закрыты
+модули и варианты перечисления.
 
 ```sh
 make -C emulator    # пересобрать эмулятор с новым набором фейсов

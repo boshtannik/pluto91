@@ -26,14 +26,14 @@ case shown on the page.
 
 ## Faces (modes)
 
-The watch has three faces — **Time**, **Alarm** and **Simple Alarm**. A short
-**Mode** press switches between them. Each face keeps its state across
-switches: alarm settings survive leaving to Time and coming back.
+The watch has four faces — **Time**, **Alarm**, **Simple Alarm** and **Timer**.
+A short **Mode** press switches between them. Each face keeps its state across
+switches: alarm settings and the timer survive leaving to Time and coming back.
 
 > Which faces are present on a given build is set in
 > `crates/pluto-faces/faces.toml` — a face not listed there is left out of the
-> firmware and the emulator entirely (the default build has **Time** and
-> **Simple Alarm**).
+> firmware and the emulator entirely (the default build has **Time**,
+> **Simple Alarm** and **Timer**).
 
 ---
 
@@ -190,6 +190,80 @@ set alarm never rings in the middle of a minute.
 While the alarm rings, the face shows the **current time in full** (with
 seconds) and the **Bell indicator blinks** every half second; once the ring
 ends it goes back to the alarm time.
+
+---
+
+## Timer face (Timer)
+
+A Casio-style countdown timer: you set a duration, the watch counts it down
+and rings when it reaches zero.
+
+### View mode
+
+```
+ TI           HH:MM:SS
+              time left
+```
+
+- The **TI** letters mean this is the timer face.
+- The remaining time is shown as HH:MM:SS (the hour is shown without a leading
+  zero, like the clock face).
+- The **LAP** indicator is on while the countdown is running (and off when it
+  is paused).
+- On the very first entry the timer is pre-set to the first preset
+  (**1 minute**), so you never stare at a pointless 00:00:00.
+
+Controls in the view mode:
+
+- **Alarm** — start / pause the countdown. When it is stopped at 00:00:00
+  (after a finished run) it starts it again from the full duration.
+- **Light** — enter the settings.
+- **Mode** — go to the next face.
+
+### Presets
+
+The **Alarm + Light** chord steps through the built-in preset durations:
+
+    1 → 3 → 5 → 7 → 10 → 15 → 20 → 30 → 40 → 60 minutes → back to 1
+
+The chord sets the duration to the preset and **stops / resets** the current
+countdown; press **Alarm** afterwards to start it.
+
+### Settings
+
+A short **Light** press in the view mode enters the settings (the running
+countdown is paused). Fields advance in the order: **seconds → minutes →
+hours**. The selected field **blinks**; the display shows which field is being
+edited — `SE` (seconds), `MI` (minutes) or `HO` (hours). The maximum duration
+is **23:59:59**.
+
+| Action            | Result                                           |
+|-------------------|--------------------------------------------------|
+| **Light**         | go to the next field; on hours — exit the settings |
+| **Light + hold**  | exit the settings (at any point)                 |
+| **Alarm**         | increase the value by 1                          |
+| **Alarm + double**| increase the value by 5                          |
+| **Alarm + hold**  | reset the value to 0                             |
+
+Leaving the settings (with Light on the hours field, or a hold) arms the
+freshly configured duration: the countdown resets to its full length, paused,
+ready to start on **Alarm**.
+
+While scrolling fast (hold), the value is shown steadily instead of blinking
+so it stays readable; blinking resumes right after you stop.
+
+### Running in the background
+
+The countdown runs even when the watch shows another face — the timer does not
+stop just because you switched to the clock.
+
+### Firing
+
+When the countdown reaches zero the watch **switches to the Timer face by
+itself** (no matter what you were looking at) and rings. The ring lasts up to
+**2 minutes** or until you press any button; the face shows **00:00:00** and
+the **Bell indicator blinks** every half second. Once the ring ends the timer
+stays at 00:00:00; press **Alarm** to run the same duration again.
 
 ---
 
