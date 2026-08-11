@@ -45,10 +45,16 @@ const WEEKDAYS: [[u8; 2]; 7] = [*b"SU", *b"MO", *b"TU", *b"WE", *b"TH", *b"FR", 
 /// (0 unused). Shown in the top-left letters (positions 0-1) while the month
 /// is edited; the letters are the stock F-91W character set (`set_char`), so
 /// every letter renders cleanly on the glass.
+///
+/// Two letters are *approximations forced by the glass*: at position 1 the
+/// upper and lower right bars share one electrode, so "P" would draw exactly
+/// like "A" — April uses "AR" (the R adds a readable bottom-left leg); "V"
+/// would draw exactly like "U", so November uses "NO"; and "Y" would draw as
+/// an upside-down A, so May uses "MA".
 const MONTH_ABBR: [[u8; 2]; 13] = [
     *b"  ", // month 0 is unused
-    *b"JA", *b"FE", *b"MR", *b"AP", *b"MY", *b"JN", // JAN FEB MAR APR MAY JUN
-    *b"JL", *b"AU", *b"SE", *b"OC", *b"NV", *b"DE", // JUL AUG SEP OCT NOV DEC
+    *b"JA", *b"FE", *b"MR", *b"AR", *b"MA", *b"JN", // JAN FEB MAR APR MAY JUN
+    *b"JL", *b"AU", *b"SE", *b"OC", *b"NO", *b"DE", // JUL AUG SEP OCT NOV DEC
 ];
 
 /// Year range of the perpetual calendar.
@@ -372,9 +378,18 @@ impl Calendar {
 
         self.draw_day(hw);
 
-        // The month number in the seconds digits stays steady: while the month
-        // is the focus the abbreviation blinks in the top letters instead.
-        self.draw_month(hw);
+        // The month number in the seconds digits blinks in sync with the
+        // month abbreviation in the top letters while the month is the focus.
+        if matches!(field, CalendarField::Month) {
+            if blink {
+                self.draw_month(hw);
+            } else {
+                hw.clear_digit(8);
+                hw.clear_digit(9);
+            }
+        } else {
+            self.draw_month(hw);
+        }
 
         self.set_indicators(hw, false);
     }

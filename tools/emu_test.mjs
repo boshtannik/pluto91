@@ -1102,10 +1102,10 @@ if (ORDER.includes('calendar')) {
     && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0       // year 2000
     && digitAt(8) === 0 && digitAt(9) === 9);
   offTick();
-  check('Calendar edit: month field off phase (abbreviation hidden, year+month steady)',
+  check('Calendar edit: month field off phase (abbreviation + month number hidden, year steady)',
     !on.has('0,13') && !on.has('0,11')
     && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
-    && digitAt(8) === 0 && digitAt(9) === 9);
+    && digitAt(8) === -1 && digitAt(9) === -1);
 
   pressAlarm(); // month 09 -> 10 (OCT)
   onTick();
@@ -1128,6 +1128,20 @@ if (ORDER.includes('calendar')) {
     && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') // A (pos1)
     && digitAt(8) === 0 && digitAt(9) === 1
     && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+
+  // Step the month to APR: the P cannot be drawn (it shares the right-bar
+  // electrode with the A), so April is the readable "AR".
+  pressAlarm(); // 01 -> 02 (FE)
+  pressAlarm(); // 02 -> 03 (MR)
+  pressAlarm(); // 03 -> 04 (AR)
+  onTick();
+  check('Calendar edit: month -> AR (APR, 04)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,15') // A (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') && on.has('0,12')               // R (pos1)
+    && digitAt(8) === 0 && digitAt(9) === 4
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+  holdAlarm(); // reset the month back to 01 (JAN) for the day-field test
+  onTick();
 
   // Light -> day field: the letters show the computed weekday (blinking), the
   // day shows with a leading zero and the year stays steady. The date is now

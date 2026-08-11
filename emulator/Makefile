@@ -25,7 +25,7 @@ $(WASM): $(shell find $(EMU_CRATE)/src ../crates/pluto-core/src ../crates/pluto-
 	mkdir -p $(BUILD)
 	cp $(WASM_OUT) $(WASM)
 
-$(TARGET): shell.html ../tools/build_page.py
+$(TARGET): shell.html ../tools/build_page.py $(WASM)
 	mkdir -p $(BUILD)
 	python3 ../tools/build_page.py shell.html $(TARGET)
 

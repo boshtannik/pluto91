@@ -17,6 +17,7 @@ style.opacity on the `[data-com][data-seg]` elements.
 Usage: python3 tools/build_page.py <shell.html> <out.html>
 """
 
+import os
 import sys
 
 GLUE = r"""
@@ -114,7 +115,7 @@ GLUE = r"""
   };
 
   var instance = null;
-  fetch('watch.wasm')
+  fetch('watch.wasm?v={{{ WASM_VERSION }}}')
     .then(function (r) { return r.arrayBuffer(); })
     .then(function (buf) { return WebAssembly.instantiate(buf, imports); })
     .then(function (result) {
@@ -182,7 +183,16 @@ def main() -> int:
     if PLACEHOLDER not in page:
         print(f"error: {PLACEHOLDER} not found in {src}", file=sys.stderr)
         return 1
-    page = page.replace(PLACEHOLDER, GLUE)
+    # Cache-bust the wasm URL: embed the wasm file's mtime so the browser
+    # always fetches the freshly built module (python's http.server sends no
+    # Cache-Control, and heuristic caching keeps stale wasm alive forever).
+    wasm_path = os.path.join(os.path.dirname(os.path.abspath(dst)), "watch.wasm")
+    try:
+        version = str(int(os.path.getmtime(wasm_path)))
+    except OSError:
+        version = "0"
+    glue = GLUE.replace("{{{ WASM_VERSION }}}", version)
+    page = page.replace(PLACEHOLDER, glue)
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(page)
     print(f"wrote {dst}")
