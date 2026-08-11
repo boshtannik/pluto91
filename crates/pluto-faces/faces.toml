@@ -10,5 +10,6 @@
 #   simple_clock  - the time + date face (always required, the default)
 #   simple_alarm  - one Casio-style alarm, no weekdays
 #   timer         - Casio-style countdown timer with presets
+#   calendar      - perpetual calendar (2000-2099), weekday from the date
 #   alarm         - full alarm face, one alarm per weekday
-faces = ["simple_clock", "simple_alarm", "timer"]
+faces = ["simple_clock", "simple_alarm", "timer", "calendar"]

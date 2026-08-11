@@ -11,6 +11,7 @@ extern "C" {
     fn js_backlight(on: u32);
     fn js_beep(freq: u32, ms: u32, delay_ms: u32);
     fn js_stop_melody();
+    fn js_set_time(ms: f64);
 }
 
 /// The emulator's default buzzer frequency (2.4 kHz).
@@ -50,5 +51,11 @@ impl Hardware for EmuHardware {
 
     fn stop_melody(&mut self) {
         unsafe { js_stop_melody() };
+    }
+
+    fn set_rtc(&mut self, epoch_ms: u64) {
+        // The page owns the clock (`js_now`): shifting its baseline makes the
+        // emulator keep ticking from the newly set time.
+        unsafe { js_set_time(epoch_ms as f64) };
     }
 }

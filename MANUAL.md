@@ -26,9 +26,10 @@ case shown on the page.
 
 ## Faces (modes)
 
-The watch has four faces — **Time**, **Alarm**, **Simple Alarm** and **Timer**.
-A short **Mode** press switches between them. Each face keeps its state across
-switches: alarm settings and the timer survive leaving to Time and coming back.
+The watch has four faces — **Time**, **Simple Alarm**, **Timer** and
+**Calendar**. A short **Mode** press switches between them. Each face keeps its
+state across switches: alarm settings and the timer survive leaving to Time and
+coming back.
 
 **Mode is contextual.** A face you *interacted with* (pressed a button on —
 e.g. started the timer, toggled the chime or entered the settings) returns to
@@ -42,7 +43,7 @@ home.
 > Which faces are present on a given build is set in
 > `crates/pluto-faces/faces.toml` — a face not listed there is left out of the
 > firmware and the emulator entirely (the default build has **Time**,
-> **Simple Alarm** and **Timer**).
+> **Simple Alarm**, **Timer** and **Calendar**).
 
 ---
 
@@ -281,6 +282,77 @@ second** (two 100 ms beeps, the second starting 250 ms after the first — the
 same cadence as the alarms). Once the ring ends the timer stays at 00:00:00;
 press **Alarm** to reset it to the full duration (paused), and press **Alarm**
 again to run it.
+
+---
+
+## Calendar face (Calendar)
+
+A perpetual calendar for the years **2000–2099**. The date is stored on the
+watch and the day of the week is **computed from the date** — you never set it
+by hand.
+
+### View mode
+
+```
+ weekday     day         YYYY
+ SU, MO, …  1..31        year 2000..2099     MM month number
+```
+
+- The weekday letters and the month number always show the stored date; the
+  date does not follow the clock on its own.
+- The **SIG** indicator shows the hourly chime (like the Time face). The
+  calendar never lights the **H24** indicator.
+
+Controls in the view mode:
+
+- **Alarm** — toggles the 12/24-hour format (the calendar does not show the
+  H24 indicator).
+- **Light** — enter the settings.
+- **Light + hold** — turn on the backlight (from anywhere).
+- **Alarm + Light** (either order) — open the info mode.
+
+### Settings
+
+A short **Light** press in the view mode enters the settings. Fields advance in
+the order: **year → month → day**; the selected field **blinks**. While the
+month is edited the top-left letters show the two-letter Casio-style **month
+abbreviation** (JA, FE, …) and the year stays in the big digits.
+
+| Action            | Result                                       |
+|-------------------|----------------------------------------------|
+| **Light**         | go to the next field; on day — exit the settings |
+| **Light + hold**  | exit the settings (at any point)             |
+| **Alarm**         | increase the value by 1                      |
+| **Alarm + double**| increase the value by 5                      |
+| **Alarm + hold**  | reset the value to the minimum (2000 / 01 / 01) |
+
+Nice touches:
+
+- The **day of the week updates live** while you scroll the day, so you can
+  find "what day is the 25th".
+- The day is **clamped to the real length** of the chosen month and year:
+  switching to February folds a 31st down to the 28th/29th, and switching to a
+  non-leap year folds a February 29th down to the 28th.
+
+### Info mode (chord Alarm+Light)
+
+A **chord** (both buttons together, either order) cycles: **view → year info →
+month info → view**.
+
+- **Year info** — the letters **YR** and the number of **days in the year**
+  (365/366) in the big digits.
+- **Month info** — the letters **MO** and the number of **days in the month**
+  (28/29/30/31) in the month digits; the year stays steady in the big digits.
+- A chord pressed during the settings **keeps your values** (like a normal
+  exit) and jumps straight to the year info.
+- The info mode returns to the view automatically after **5 seconds** without a
+  press; any press starts the countdown over.
+
+### A note on the glass
+
+The F-91W LCD shares one electrode between some segments of the day-tens and
+of the hour/minute tens digits (positions 2, 4 and 6). Because of this the day
+tens digit cannot show a leading **0** (days 1–9 show a blank tens).
 
 ---
 

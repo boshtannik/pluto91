@@ -57,4 +57,10 @@ pub trait Hardware: Display {
     /// Stop any melody currently playing via [`Hardware::melody`]. Defaults to
     /// no-op.
     fn stop_melody(&mut self) {}
+    /// Set the wall clock (the RTC). Defaults to no-op: most platforms read
+    /// the time from their own clock, and only a time-setting face needs to
+    /// write it. The calendar face's settings screen calls this when the user
+    /// exits the settings; on the emulator it shifts the page's `js_now`,
+    /// on the hardware it programs the RTC_C.
+    fn set_rtc(&mut self, _epoch_ms: u64) {}
 }

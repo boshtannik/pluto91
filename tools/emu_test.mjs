@@ -11,6 +11,9 @@ const imports = { env: {
   js_beep: (freq, ms, delay) => { beeps.push([freq, ms, delay]); },
   js_stop_melody: () => {},
   js_now: () => t,
+  // The calendar's settings write the wall clock back through here (the page
+  // shifts its js_now baseline; the harness just moves `t`).
+  js_set_time: (ms) => { t = ms; },
   js_panic: () => { console.log('panic'); },
 }};
 const { instance } = await WebAssembly.instantiate(buf, imports);
@@ -36,7 +39,7 @@ for (const raw of facesText.split('\n')) {
 }
 if (!enabled.has('simple_clock')) throw new Error('faces.toml must always enable simple_clock');
 // Faces in FaceSet order: simple_clock first, then the config order.
-const ORDER = ['simple_clock', 'alarm', 'simple_alarm', 'timer'].filter((f) => enabled.has(f));
+const ORDER = ['simple_clock', 'alarm', 'simple_alarm', 'timer', 'calendar'].filter((f) => enabled.has(f));
 const idx = (name) => ORDER.indexOf(name);
 if (ex.pluto_face_count() !== ORDER.length) {
   throw new Error(
@@ -992,15 +995,19 @@ on = onNow();
 check('untouched face cycles onward (Timer TI)',
   on.has('1,14') && !on.has('2,11') && !on.has('1,10'));
 
-// A face that was NOT interacted with keeps cycling on Mode (no jump home).
-mode(); // untouched Timer -> clock
+// A face that was NOT interacted with keeps cycling on Mode (no jump home):
+// the untouched Timer goes on to the Calendar face.
+mode(); // untouched Timer -> Calendar
 ex.pluto_tick(t);
 on = onNow();
-check('Mode without interaction keeps cycling (back on the clock)',
-  digitAt(3) === 3 && !on.has('1,10'));
+check('Mode without interaction keeps cycling (Calendar view, year 2026)',
+  digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 2 && digitAt(7) === 6
+  && digitAt(8) === 0 && digitAt(9) === 9 && !on.has('1,10'));
 
 // --- idle auto-return: no buttons for `auto_home_secs` -> back to the clock ---
 ex.pluto_set_auto_home(3);
+mode(); // -> SimpleClock
+ex.pluto_tick(t);
 mode(); // -> SimpleAlarm
 ex.pluto_tick(t);
 mode(); // -> Timer (untouched)
@@ -1015,5 +1022,363 @@ check('idle auto-return goes back to the clock face',
   digitAt(3) === 3 && !on.has('1,10'));
 ex.pluto_set_auto_home(0);
 
+if (ORDER.includes('calendar')) {
+  // --- Calendar: perpetual calendar (2000-2099), weekday computed from the date ---
+  // The tail above entered Calendar once (seeding 2026-09-03, Thursday), the
+  // idle auto-return bounced back to the clock, and this entry re-shows the
+  // same configured date.
+  goTo('calendar');
+  t = Date.UTC(2026, 8, 3, 15, 40, 0);
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar view: TH letters, day 03, year 2026, month 09, indicators off',
+    on.has('0,13') && on.has('1,14')                      // T (pos0)
+    && on.has('1,11') && on.has('1,12') && on.has('2,12') // H (pos1)
+    && digitAt(2) === -1 && digitAt(3) === 3              // day 03 (tens blank in view)
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 2 && digitAt(7) === 6
+    && digitAt(8) === 0 && digitAt(9) === 9               // month 09
+    && !on.has('0,16') && !on.has('2,16') && !on.has('2,17') && !on.has('1,10')
+    && !on.has('0,17'));                                  // Signal off (no chime face in this build)
+
+  // The calendar suppresses blinking for NO_BLINK_MS (750ms) after a change, so
+  // the fixed BLINK_ON/BLINK_OFF constants the other faces use would read the
+  // field steady. Align to a fresh second after each press instead: ms=0 shows
+  // the field, ms=250 hides it.
+  const onTick = () => { t = Math.ceil(t / 1000) * 1000; ex.pluto_tick(t); on = onNow(); };
+  const offTick = () => { t = Math.ceil(t / 1000) * 1000 + 250; ex.pluto_tick(t); on = onNow(); };
+  const pressAlarm = () => press(2);
+  const pressLight = () => press(0);
+  const doublePress = () => {
+    t += 2000; btn(2, 1); // Press (first click) -> +1
+    t += 100;  btn(2, 0); // release
+    t += 100;  btn(2, 1); // within 400ms -> Double -> +4
+    t += 2000; btn(2, 0);
+  };
+  const holdAlarm = () => {
+    t += 2000; btn(2, 1); // Press -> +1
+    t += 2000; btn(2, 1); // Hold -> reset
+    t += 2000; btn(2, 0);
+  };
+
+  // Light enters the settings on the year field (YR letters, the year blinks;
+  // the edit screen clears the Signal indicator). The hour/minute/second seed
+  // from the wall clock at the Light press (dispatched on release), so pin t
+  // so that release lands exactly on 15:40:00 (press() adds 2 s before the
+  // down and 2 s more for the release).
+  t = Date.UTC(2026, 8, 3, 15, 39, 56);
+  ex.pluto_tick(t);
+  pressLight(); // view -> edit year
+  onTick();
+  check('Calendar edit: YR letters, year 2026 blinking (on phase)',
+    on.has('0,14') && on.has('1,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') // Y (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') && on.has('0,12') // R (pos1)
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 2 && digitAt(7) === 6
+    && !on.has('0,17'));                                  // Signal cleared in the edit screen
+  offTick();
+  check('Calendar edit: year field blinks (hidden on the off phase)',
+    digitAt(4) === -1 && digitAt(5) === -1 && digitAt(6) === -1 && digitAt(7) === -1);
+
+  pressAlarm(); // year 2026 -> 2027
+  onTick();
+  check('Calendar edit: Alarm steps year +1 (2027)',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 2 && digitAt(7) === 7);
+  doublePress(); // +5: 2027 -> 2028 (+1) -> 2032 (+4)
+  onTick();
+  check('Calendar edit: double press adds 5 (2032)',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 3 && digitAt(7) === 2);
+  holdAlarm(); // Press +1 (2033) then Hold -> reset to 2000
+  onTick();
+  check('Calendar edit: hold resets the year to 2000',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+
+  // Light -> month field: the top-left letters draw the two-letter Casio-style
+  // month abbreviation (SEP), blinking; the big digits keep the year (steady,
+  // 2000 after the reset) and the month number stays in the seconds digits.
+  pressLight(); // year -> month
+  onTick();
+  check('Calendar edit: month abbreviation SE in the letters, year 2000, month 09',
+    on.has('0,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') && on.has('0,14') // S (pos0)
+    && on.has('0,11') && on.has('2,11') && on.has('1,12') && on.has('2,12')               // E (pos1)
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0       // year 2000
+    && digitAt(8) === 0 && digitAt(9) === 9);
+  offTick();
+  check('Calendar edit: month field off phase (abbreviation hidden, year+month steady)',
+    !on.has('0,13') && !on.has('0,11')
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
+    && digitAt(8) === 0 && digitAt(9) === 9);
+
+  pressAlarm(); // month 09 -> 10 (OCT)
+  onTick();
+  check('Calendar edit: month +1 -> OC (OCT, 10)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,15') && on.has('2,14') && on.has('2,13') // O (pos0)
+    && on.has('0,11') && on.has('2,11') && on.has('1,12')                                                    // C (pos1)
+    && digitAt(8) === 1 && digitAt(9) === 0
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+  doublePress(); // +5: 10 -> 11 (+1) -> 15 (+4) wraps to 3 (MAR)
+  onTick();
+  check('Calendar edit: double +5 wraps 10 -> MR (MAR, 03)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') && on.has('0,12')               // R (pos1)
+    && digitAt(8) === 0 && digitAt(9) === 3
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+  holdAlarm(); // Press +1 (03 -> 04) then Hold -> reset month to 01 (JAN)
+  onTick();
+  check('Calendar edit: hold resets the month to 01 (JA, JAN)',
+    on.has('1,13') && on.has('2,15') && on.has('2,13')     // J (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') // A (pos1)
+    && digitAt(8) === 0 && digitAt(9) === 1
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0);
+
+  // Light -> day field: the letters show the computed weekday (blinking), the
+  // day shows with a leading zero and the year stays steady. The date is now
+  // 2000-01-03 (day was seeded 03, the year and month were reset) -> Monday.
+  pressLight(); // month -> day
+  onTick();
+  check('Calendar edit: day field, weekday MO for 2000-01-03, day 03',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === -1 && digitAt(3) === 3                 // day 03 (the day tens cannot show 0 on the glass)
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0); // year 2000 steady
+  offTick();
+  check('Calendar edit: weekday letters hidden on the off phase (day still shown)',
+    !on.has('0,13') && !on.has('1,14') && !on.has('1,11') && !on.has('2,12')
+    && digitAt(2) === -1 && digitAt(3) === 3);
+
+  pressAlarm(); // day 03 -> 04 (2000-01-04 = Tuesday TU)
+  onTick();
+  check('Calendar edit: day +1 -> 04, weekday TU',
+    on.has('0,13') && on.has('1,14')                   // T (pos0)
+    && on.has('1,11') && on.has('2,11') && on.has('1,12') // U (pos1)
+    && digitAt(2) === -1 && digitAt(3) === 4);
+  doublePress(); // +5: 04 -> 05 (+1) -> 09 (+4) (2000-01-09 = Sunday SU)
+  onTick();
+  check('Calendar edit: double +5 -> day 09, weekday SU',
+    on.has('0,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') && on.has('0,14') // S (pos0)
+    && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // U (pos1)
+    && digitAt(2) === -1 && digitAt(3) === 9);
+  holdAlarm(); // Press +1 (09 -> 10) then Hold -> reset day to 01 (2000-01-01 = Saturday SA)
+  onTick();
+  check('Calendar edit: hold resets the day to 01, weekday SA',
+    on.has('0,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') && on.has('0,14') // S (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12')                // A (pos1)
+    && digitAt(2) === -1 && digitAt(3) === 1);
+
+  // The day is clamped to the real month length: Jan 2000 has 31 days, Feb
+  // 2000 has 29 (leap). Set the day to 31, then step the month to FEB: 31
+  // folds down to 29.
+  for (let i = 0; i < 30; i++) pressAlarm(); // day 01 -> 31
+  onTick();
+  check('Calendar edit: day reaches 31 (2000-01-31 = Monday MO)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === 3 && digitAt(3) === 1);
+
+  // Light -> hour field: the letters read HR, the hour (seeded 15:40:00 from
+  // the wall clock at entry) shows in the middle of the big digits and blinks,
+  // while the day and month stay steady.
+  pressLight(); // day -> hour
+  onTick();
+  check('Calendar edit: HR letters, hour 15 (seeded from the clock), day 31, month 01',
+    on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,15') // H (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') && on.has('0,12') // R (pos1)
+    && digitAt(5) === 1 && digitAt(6) === 5                 // hour 15
+    && digitAt(4) === -1 && digitAt(7) === -1               // year hidden
+    && digitAt(2) === 3 && digitAt(3) === 1                 // day 31 steady
+    && digitAt(8) === 0 && digitAt(9) === 1);               // month 01 steady
+  offTick();
+  check('Calendar edit: hour field blinks (hidden on the off phase)',
+    digitAt(5) === -1 && digitAt(6) === -1 && digitAt(2) === 3 && digitAt(3) === 1);
+
+  pressAlarm(); // hour 15 -> 16
+  onTick();
+  check('Calendar edit: Alarm steps hour +1 (16)', digitAt(5) === 1 && digitAt(6) === 6);
+  doublePress(); // +5: 16 -> 17 (+1) -> 21 (+4)
+  onTick();
+  check('Calendar edit: double press adds 5 to the hour (21)', digitAt(5) === 2 && digitAt(6) === 1);
+  holdAlarm(); // Press +1 (22) then Hold -> reset the hour to 00
+  onTick();
+  check('Calendar edit: hold resets the hour to 00', digitAt(5) === 0 && digitAt(6) === 0);
+
+  // Light -> minute field (MI label).
+  pressLight(); // hour -> minute
+  onTick();
+  check('Calendar edit: MI letters, minute 40 (seeded from the clock)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M (pos0)
+    && on.has('0,12') && on.has('1,12')                                                                       // I (pos1)
+    && digitAt(5) === 4 && digitAt(6) === 0
+    && digitAt(2) === 3 && digitAt(3) === 1);                 // day steady
+  pressAlarm(); // minute 40 -> 41
+  onTick();
+  check('Calendar edit: minute +1 -> 41', digitAt(5) === 4 && digitAt(6) === 1);
+  doublePress(); // +5: 41 -> 42 (+1) -> 46 (+4)
+  onTick();
+  check('Calendar edit: double +5 -> minute 46', digitAt(5) === 4 && digitAt(6) === 6);
+  holdAlarm(); // reset the minute to 00
+  onTick();
+  check('Calendar edit: hold resets the minute to 00', digitAt(5) === 0 && digitAt(6) === 0);
+
+  // Light -> second field (SE label); the second wraps 59 -> 00.
+  pressLight(); // minute -> second
+  onTick();
+  check('Calendar edit: SE letters, second 00',
+    on.has('0,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') && on.has('0,14') // S (pos0)
+    && on.has('0,11') && on.has('2,11') && on.has('1,12') && on.has('2,12')                // E (pos1)
+    && digitAt(5) === 0 && digitAt(6) === 0);
+  for (let i = 0; i < 59; i++) pressAlarm(); // second 00 -> 59
+  onTick();
+  check('Calendar edit: second wraps 00 -> 59 after 59 steps', digitAt(5) === 5 && digitAt(6) === 9);
+  holdAlarm(); // reset the second to 00
+  onTick();
+  check('Calendar edit: hold resets the second to 00', digitAt(5) === 0 && digitAt(6) === 0);
+
+  // The last field's Light press leaves the settings and writes the whole
+  // date + time back to the wall clock (here 2000-01-31 00:00:00): the
+  // harness `js_now` (t) must move to exactly that epoch.
+  pressLight(); // second -> view (writes the clock)
+  check('Calendar edit: leaving the settings writes the new date+time to the RTC',
+    t === Date.UTC(2000, 0, 31, 0, 0, 0));
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar view after write-back: 2000-01-31 Monday MO',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === 3 && digitAt(3) === 1
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0
+    && digitAt(8) === 0 && digitAt(9) === 1);
+  // The clock face now runs at the written-back time.
+  goTo('simple_clock');
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Clock face shows the written-back time (00:00, Mon 2000-01-31)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === 3 && digitAt(3) === 1                 // day 31
+    && digitAt(4) === -1 && digitAt(5) === 0                // hour 00 (leading zero blanked)
+    && digitAt(6) === 0 && digitAt(7) === 0                 // minute 00
+    && digitAt(8) === 0 && digitAt(9) === 4);               // second 04 (from the goTo presses)
+
+  // Re-enter and step the month to FEB: the day must fold 31 -> 29.
+  goTo('calendar');
+  pressLight(); // view -> edit year
+  pressLight(); // year -> month
+  pressAlarm(); // month 01 -> 02 (FEB)
+  onTick();
+  check('Calendar edit: month -> FE (FEB) folds the day 31 -> 29 (leap 2000)',
+    on.has('0,13') && on.has('2,14') && on.has('1,15') && on.has('0,14') // F (pos0)
+    && on.has('0,11') && on.has('2,11') && on.has('1,12') && on.has('2,12') // E (pos1)
+    && digitAt(8) === 0 && digitAt(9) === 2
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 0 // year 2000 steady
+    && digitAt(2) === 2 && digitAt(3) === 9);
+
+  // Step into a non-leap year: Feb 29 collapses to the 28th. (A Light hold
+  // leaves the settings from any field, writing the clock.)
+  holdLight(); // exit the settings (writes the clock)
+  pressLight(); // view -> edit year
+  pressAlarm(); // 2000 -> 2001 (non-leap): Feb 29 folds to 28
+  onTick();
+  check('Calendar edit: non-leap year folds Feb 29 -> 28 (2001)',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 1
+    && digitAt(2) === 2 && digitAt(3) === 8);
+
+  // Into another leap year: the 28th stays, and the day can then step to 29.
+  for (let i = 0; i < 3; i++) pressAlarm(); // 2001 -> 2004
+  onTick();
+  check('Calendar edit: leap year 2004, Feb day 28 kept',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 4
+    && digitAt(2) === 2 && digitAt(3) === 8);
+  pressLight(); // year -> month
+  pressLight(); // month -> day
+  pressAlarm(); // day 28 -> 29 (2004-02-29 = Sunday SU)
+  onTick();
+  check('Calendar edit: day 29 in leap Feb 2004 (Sunday SU)',
+    on.has('0,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') && on.has('0,14') // S (pos0)
+    && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // U (pos1)
+    && digitAt(2) === 2 && digitAt(3) === 9);
+  holdLight(); // exit the settings (writes the clock)
+  pressLight(); // view -> edit year
+  pressAlarm(); // 2004 -> 2005 (non-leap): Feb 29 folds to 28
+  onTick();
+  check('Calendar edit: non-leap year folds Feb 29 -> 28 (2005)',
+    digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 5
+    && digitAt(2) === 2 && digitAt(3) === 8);
+
+  // Chord (Alarm+Light) cycles view -> info YR -> info MO -> view. A chord
+  // from the middle of an edit keeps the settings and jumps straight to the
+  // info YR.
+  chordPress(2, 0); // from the year edit -> info YR (2005 has 365 days)
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar chord: edit -> info YR (days in year 365)',
+    on.has('0,14') && on.has('1,13') && on.has('2,15') && on.has('2,13') && on.has('1,15') // Y (pos0)
+    && on.has('0,11') && on.has('1,11') && on.has('1,12') && on.has('2,12') && on.has('0,12') // R (pos1)
+    && digitAt(5) === 3 && digitAt(6) === 6 && digitAt(7) === 5  // 365
+    && digitAt(4) === -1
+    && digitAt(2) === 2 && digitAt(3) === 8                      // day
+    && digitAt(8) === 0 && digitAt(9) === 2);                    // month
+  chordPress(2, 0); // -> info MO
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar chord: info YR -> info MO (days in month 28)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 5  // year 2005 steady
+    && digitAt(2) === 2 && digitAt(3) === 8
+    && digitAt(8) === 2 && digitAt(9) === 8);                    // days in month
+  chordPress(2, 0); // -> view
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar chord: info MO -> view (2005-02-28, Monday MO)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === 2 && digitAt(3) === 8
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 5
+    && digitAt(8) === 0 && digitAt(9) === 2);
+
+  // The info mode auto-returns to the view after 5s without a press; any press
+  // resets the countdown. Pin the time so the window is unambiguous. Gestures
+  // are delivered on release: the chord lands ~16:00:06.05 and the Light press
+  // on release ~16:00:10.05 keeps the mode alive until ~16:00:15.05.
+  t = Date.UTC(2026, 8, 3, 16, 0, 0);
+  ex.pluto_tick(t); // view (the date does not follow the clock)
+  chordPress(2, 0); // view -> info YR
+  ex.pluto_tick(t); // ~16:00:06.05, still up
+  pressLight();     // press released at ~16:00:10.05 -> stays alive until ~16:00:15.05
+  ex.pluto_tick(t);
+  t = Date.UTC(2026, 8, 3, 16, 0, 12, 50); // +2.5s after the press -> still up
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar: a press in info YR extends it (still YR at +4s)',
+    on.has('0,14') && on.has('1,13') && on.has('2,15') && on.has('2,13') && on.has('1,15'));
+  t = Date.UTC(2026, 8, 3, 16, 0, 17, 0); // +7s after the press -> expired
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar: info YR auto-returns to the view after the timeout',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14') // M
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')                                  // O
+    && digitAt(2) === 2 && digitAt(3) === 8
+    && digitAt(4) === 2 && digitAt(5) === 0 && digitAt(6) === 0 && digitAt(7) === 5);
+
+  // The chord is recognised in either press order (Light then Alarm too).
+  t = Date.UTC(2026, 8, 3, 16, 1, 0, 0);
+  ex.pluto_tick(t);
+  chordPress(0, 2); // Light down first, Alarm second -> info YR
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar: chord Light+Alarm also enters info YR (365)',
+    on.has('0,14') && on.has('1,13') && on.has('2,15') && on.has('2,13') && on.has('1,15')
+    && digitAt(5) === 3 && digitAt(6) === 6 && digitAt(7) === 5);
+  chordPress(2, 0); // -> info MO
+  chordPress(2, 0); // -> view
+  ex.pluto_tick(t);
+  on = onNow();
+  check('Calendar: full chord cycle returns to the view (2005-02-28 MO)',
+    on.has('0,13') && on.has('0,14') && on.has('1,13') && on.has('2,14') && on.has('2,13') && on.has('1,14')
+    && on.has('0,11') && on.has('1,11') && on.has('2,11') && on.has('1,12')
+    && digitAt(2) === 2 && digitAt(3) === 8 && digitAt(4) === 2 && digitAt(7) === 5
+    && digitAt(8) === 0 && digitAt(9) === 2);
+}
+
 if (fail) process.exit(1);
 console.log('ALL OK');
+
+

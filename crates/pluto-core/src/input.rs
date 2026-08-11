@@ -96,10 +96,12 @@ impl ButtonScanner {
                 return None;
             }
             // A quick tap: a press within `DOUBLE_CLICK_MS` of the previous
-            // one is a double-click.
-            let is_double = self
-                .prev_press_ms
-                .is_some_and(|prev| self.press_ms.saturating_sub(prev) <= DOUBLE_CLICK_MS);
+            // one is a double-click. A press *before* the previous one (the
+            // clock jumped backwards, e.g. the RTC was written back) is not.
+            let is_double = self.prev_press_ms.is_some_and(|prev| {
+                self.press_ms >= prev
+                    && self.press_ms.saturating_sub(prev) <= DOUBLE_CLICK_MS
+            });
             self.prev_press_ms = Some(self.press_ms);
             if is_double {
                 Some(GestureKind::Double)

@@ -49,6 +49,10 @@ struct HwHardware {
     portj: msp430fr6972::PORT_J,
 }
 
+/// Wall clock written by a time-setting face ([`Hardware::set_rtc`]); the
+/// main loop picks it up and re-bases its time counter.
+static RTC_SET: core::cell::Cell<Option<u64>> = core::cell::Cell::new(None);
+
 impl Display for HwHardware {
     fn clear_all(&mut self) {
         self.lcd.clear_all();
@@ -77,6 +81,12 @@ impl Hardware for HwHardware {
             });
             i += 1;
         }
+    }
+
+    fn set_rtc(&mut self, epoch_ms: u64) {
+        // TODO: program the real RTC_C registers (pluto-fw `rtc.c`). For now
+        // the scaffold stores the time and the main loop re-bases its counter.
+        RTC_SET.set(Some(epoch_ms));
     }
 }
 
@@ -152,6 +162,12 @@ fn main() -> ! {
 
     let ids = [ButtonId::Light, ButtonId::Mode, ButtonId::Alarm];
     loop {
+        // Apply a wall-clock write from a time-setting face (the calendar's
+        // settings screen) and keep counting from there.
+        if let Some(ms) = RTC_SET.get() {
+            RTC_SET.set(None);
+            now_ms = ms;
+        }
         now_ms += TICK_MS;
         let now = DateTime::from_epoch_ms(now_ms);
         watch.tick(now, &mut hw);

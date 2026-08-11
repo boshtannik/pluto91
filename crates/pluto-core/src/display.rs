@@ -44,13 +44,19 @@ impl<T: Display + ?Sized> DigitDisplay for T {
             return;
         }
         let segs = crate::font::DIGIT_SEGS[digit as usize];
-        for i in 0..7 {
-            let com = FONT[pos][i][0];
-            let seg = FONT[pos][i][1];
-            if com < 0 || seg < 0 {
-                continue;
+        for pass in 0..2 {
+            for i in 0..7 {
+                let on = segs & (1 << i) != 0;
+                if on != (pass == 1) {
+                    continue;
+                }
+                let com = FONT[pos][i][0];
+                let seg = FONT[pos][i][1];
+                if com < 0 || seg < 0 {
+                    continue;
+                }
+                self.set_segment(com as u8, seg as u8, on);
             }
-            self.set_segment(com as u8, seg as u8, segs & (1 << i) != 0);
         }
     }
 

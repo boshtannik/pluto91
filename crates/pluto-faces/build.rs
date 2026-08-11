@@ -15,6 +15,7 @@ const KNOWN: &[(&str, &str)] = &[
     ("alarm", "face_alarm"),
     ("simple_alarm", "face_simple_alarm"),
     ("timer", "face_timer"),
+    ("calendar", "face_calendar"),
 ];
 
 fn main() {

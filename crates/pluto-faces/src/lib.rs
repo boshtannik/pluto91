@@ -19,6 +19,8 @@ mod alarm;
 mod simple_alarm;
 #[cfg(face_timer)]
 mod timer;
+#[cfg(face_calendar)]
+mod calendar;
 
 use pluto_core::face::{AlarmAction, ChordEvent, Face, FaceContext, GestureEvent};
 use pluto_core::watch::FaceSet;
@@ -32,12 +34,15 @@ pub use alarm::{Alarm, AlarmDay, AlarmField, AlarmMode};
 pub use simple_alarm::{SimpleAlarm, SimpleAlarmField, SimpleAlarmMode};
 #[cfg(face_timer)]
 pub use timer::{Timer, TimerField, TimerMode};
+#[cfg(face_calendar)]
+pub use calendar::{Calendar, CalendarField, CalendarMode};
 
 /// Number of enabled faces (the sum of one-per-face cfg counters).
 const FACE_COUNT: usize = if cfg!(face_simple_clock) { 1 } else { 0 }
     + if cfg!(face_alarm) { 1 } else { 0 }
     + if cfg!(face_simple_alarm) { 1 } else { 0 }
-    + if cfg!(face_timer) { 1 } else { 0 };
+    + if cfg!(face_timer) { 1 } else { 0 }
+    + if cfg!(face_calendar) { 1 } else { 0 };
 
 /// All faces, linked together as an enum. `simple_clock` is always the first
 /// variant: the runtime boots into it and it is the `Default`.
@@ -51,6 +56,8 @@ pub enum Faces {
     SimpleAlarm(SimpleAlarm),
     #[cfg(face_timer)]
     Timer(Timer),
+    #[cfg(face_calendar)]
+    Calendar(Calendar),
 }
 
 impl Default for Faces {
@@ -70,6 +77,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.init(ctx, hw),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.init(ctx, hw),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.init(ctx, hw),
         }
     }
 
@@ -83,6 +92,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.tick(ctx, hw),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.tick(ctx, hw),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.tick(ctx, hw),
         }
     }
 
@@ -96,6 +107,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.background_tick(ctx, hw),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.background_tick(ctx, hw),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.background_tick(ctx, hw),
         }
     }
 
@@ -109,6 +122,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.button(event, ctx, hw),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.button(event, ctx, hw),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.button(event, ctx, hw),
         }
     }
 
@@ -122,6 +137,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.chord(event, ctx, hw),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.chord(event, ctx, hw),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.chord(event, ctx, hw),
         }
     }
 
@@ -135,6 +152,8 @@ impl Face for Faces {
             Faces::SimpleAlarm(f) => f.alarm_action(),
             #[cfg(face_timer)]
             Faces::Timer(f) => f.alarm_action(),
+            #[cfg(face_calendar)]
+            Faces::Calendar(f) => f.alarm_action(),
         }
     }
 }
@@ -163,6 +182,11 @@ static ALL_FACES: [Faces; FACE_COUNT] = {
     #[cfg(face_timer)]
     {
         faces[i] = Faces::Timer(Timer::new());
+        i += 1;
+    }
+    #[cfg(face_calendar)]
+    {
+        faces[i] = Faces::Calendar(Calendar::new());
         i += 1;
     }
     faces

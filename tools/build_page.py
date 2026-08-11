@@ -70,6 +70,14 @@ GLUE = r"""
     activeTones = [];
   }
 
+  // Local wall-clock time expressed as if it were UTC (matches the real RTC,
+  // which is set to local time). `clockOffset` shifts it when the calendar's
+  // settings write a new wall clock, so the emulator keeps ticking from there.
+  function nowLocal() {
+    return Date.now() - new Date().getTimezoneOffset() * 60000;
+  }
+  var clockOffset = 0;
+
   var imports = {
     env: {
       // The firmware's DateTime is timezone-agnostic: it renders whatever
@@ -77,7 +85,12 @@ GLUE = r"""
       // time, so the emulator feeds the same thing: local time expressed
       // as if it were UTC.
       js_now: function () {
-        return Date.now() - new Date().getTimezoneOffset() * 60000;
+        return nowLocal() + clockOffset;
+      },
+      // The calendar face's settings wrote a new wall clock: shift the
+      // baseline so js_now returns `ms` now and keeps ticking from there.
+      js_set_time: function (ms) {
+        clockOffset = ms - nowLocal();
       },
       js_clear: function () {
         document.querySelectorAll('[data-com][data-seg]')
