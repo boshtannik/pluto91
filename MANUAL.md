@@ -314,22 +314,28 @@ Controls in the view mode:
 ### Settings
 
 A short **Light** press in the view mode enters the settings. Fields advance in
-the order: **year → month → day**; the selected field **blinks**. While the
-month is edited the top-left letters show the two-letter Casio-style **month
-abbreviation** (JA, FE, …) and the year stays in the big digits.
+the order: **year → month → day → hour → minute → second**; the selected field
+**blinks**. Every field shows its two-letter label in the top-left letters:
+**YR** / **MO** / **DA** / **HR** / **MI** / **SE**.
+
+While the date fields are edited the layout stays exactly like the view — the
+year in the big digits, the day in the top-right digits, the month in the
+seconds digits — and only the edited value blinks. While the time fields are
+edited the **whole clock** shows in its native places (HH:MM:SS), again with
+only the focused part blinking.
 
 | Action            | Result                                       |
 |-------------------|----------------------------------------------|
-| **Light**         | go to the next field; on day — exit the settings |
+| **Light**         | go to the next field; on second — exit the settings |
 | **Light + hold**  | exit the settings (at any point)             |
 | **Alarm**         | increase the value by 1                      |
 | **Alarm + double**| increase the value by 5                      |
-| **Alarm + hold**  | reset the value to the minimum (2000 / 01 / 01) |
+| **Alarm + hold**  | reset the value to the minimum (2000 / 01 / 01 / 00 / 00 / 00) |
 
 Nice touches:
 
-- The **day of the week updates live** while you scroll the day, so you can
-  find "what day is the 25th".
+- The **day of the week is computed** from the date and shown in the view, so
+  you can scroll to find "what day is the 25th" — it never needs editing.
 - The day is **clamped to the real length** of the chosen month and year:
   switching to February folds a 31st down to the 28th/29th, and switching to a
   non-leap year folds a February 29th down to the 28th.

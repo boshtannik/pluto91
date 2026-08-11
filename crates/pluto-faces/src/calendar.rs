@@ -11,10 +11,12 @@
 //! minute -> second (Light advances, Alarm steps the value, a double adds 5, a
 //! hold resets to the minimum — 2000 / 01 / 01 / 00 / 00 / 00), like the other
 //! faces. The year always stays in 2000..=2099 (stepping past 2099 wraps to
-//! 2000). While the month is edited the top-left letters show the two-letter
-//! Casio-style **month abbreviation** (JA, FE, ...) and the year stays in the
-//! big digits; while the day is edited the letters show the computed weekday
-//! (blinking), so you see the day of the week change as you scroll. The day is
+//! 2000). Each field shows its two-letter label in the top-left letters —
+//! **YR** / **MO** / **DA** for the date fields and **HR** / **MI** / **SE**
+//! for the time fields — while the edited *value* blinks in place. The weekday
+//! is always a computed value (shown in the view, never edited). While the time
+//! fields are edited the whole clock shows in its native places (HH:MM:SS) with
+//! only the focused part blinking. The day is
 //! always clamped to the real length of the chosen
 //! month/year: switching to February folds a 30th/31st down to the 28th/29th,
 //! and changing to a non-leap year folds Feb 29 to the 28th.
@@ -40,22 +42,6 @@ use pluto_core::{DigitDisplay, Hardware};
 
 /// Two-letter weekday abbreviations, indexed by `Weekday` (0 = Sunday).
 const WEEKDAYS: [[u8; 2]; 7] = [*b"SU", *b"MO", *b"TU", *b"WE", *b"TH", *b"FR", *b"SA"];
-
-/// Two-letter month abbreviations (the Casio LCD style), indexed by month
-/// (0 unused). Shown in the top-left letters (positions 0-1) while the month
-/// is edited; the letters are the stock F-91W character set (`set_char`), so
-/// every letter renders cleanly on the glass.
-///
-/// Two letters are *approximations forced by the glass*: at position 1 the
-/// upper and lower right bars share one electrode, so "P" would draw exactly
-/// like "A" — April uses "AR" (the R adds a readable bottom-left leg); "V"
-/// would draw exactly like "U", so November uses "NO"; and "Y" would draw as
-/// an upside-down A, so May uses "MA".
-const MONTH_ABBR: [[u8; 2]; 13] = [
-    *b"  ", // month 0 is unused
-    *b"JA", *b"FE", *b"MR", *b"AR", *b"MA", *b"JN", // JAN FEB MAR APR MAY JUN
-    *b"JL", *b"AU", *b"SE", *b"OC", *b"NO", *b"DE", // JUL AUG SEP OCT NOV DEC
-];
 
 /// Year range of the perpetual calendar.
 const YEAR_MIN: u16 = 2000;
@@ -233,15 +219,6 @@ impl Calendar {
         hw.set_digit(9, self.month % 10);
     }
 
-    /// A 2-digit value right-aligned in the middle of the big digits
-    /// (positions 5-6), for the hour/minute/second edit fields.
-    fn draw_time_value(&self, hw: &mut impl Hardware, value: u8) {
-        hw.clear_digit(4);
-        hw.set_digit(5, value / 10);
-        hw.set_digit(6, value % 10);
-        hw.clear_digit(7);
-    }
-
     /// A 3-digit count right-aligned in the big digits (positions 5-7), for
     /// the days-in-year info (365/366).
     fn draw_count(&self, hw: &mut impl Hardware, count: u16) {
@@ -283,104 +260,85 @@ impl Calendar {
             _ => return,
         };
 
-        // Weekday letters: the year, month and time fields show their labels;
-        // the day field shows the computed weekday (blinking), like the alarm
-        // face's day field, so scrolling the day shows its weekday live. The
-        // month field shows the two-letter Casio-style month abbreviation
-        // (blinking) instead of the MO label.
-        match field {
-            CalendarField::Year => {
-                hw.set_char(0, b'Y');
-                hw.set_char(1, b'R');
+        // The top-left letters show the field's label — YR / MO / DA / HR /
+        // MI / SE — steadily; the edited *value* is what blinks.
+        let label = match field {
+            CalendarField::Year => *b"YR",
+            CalendarField::Month => *b"MO",
+            CalendarField::Day => *b"DA",
+            CalendarField::Hour => *b"HR",
+            CalendarField::Minute => *b"MI",
+            CalendarField::Second => *b"SE",
+        };
+        hw.set_char(0, label[0]);
+        hw.set_char(1, label[1]);
+
+        // Editing the time shows the whole clock in its native places — hours
+        // at 4-5 (no leading zero, like the clock face), minutes at 6-7,
+        // seconds at 8-9 — and only the focused field blinks. The day digits
+        // are not part of a clock, so they are cleared while editing the time.
+        if matches!(field, CalendarField::Hour | CalendarField::Minute | CalendarField::Second) {
+            hw.clear_digit(2);
+            hw.clear_digit(3);
+            let show_hour = field != CalendarField::Hour || blink;
+            if show_hour && self.hour >= 10 {
+                hw.set_digit(4, self.hour / 10);
+            } else {
+                hw.clear_digit(4);
             }
-            CalendarField::Month => {
-                if blink {
-                    let m = MONTH_ABBR[self.month as usize];
-                    hw.set_char(0, m[0]);
-                    hw.set_char(1, m[1]);
-                } else {
-                    hw.clear_char(0);
-                    hw.clear_char(1);
-                }
+            if show_hour {
+                hw.set_digit(5, self.hour % 10);
+            } else {
+                hw.clear_digit(5);
             }
-            CalendarField::Hour => {
-                hw.set_char(0, b'H');
-                hw.set_char(1, b'R');
+
+            let show_minute = field != CalendarField::Minute || blink;
+            if show_minute {
+                hw.set_digit(6, self.minute / 10);
+                hw.set_digit(7, self.minute % 10);
+            } else {
+                hw.clear_digit(6);
+                hw.clear_digit(7);
             }
-            CalendarField::Minute => {
-                hw.set_char(0, b'M');
-                hw.set_char(1, b'I');
+
+            let show_second = field != CalendarField::Second || blink;
+            if show_second {
+                hw.set_digit(8, self.second / 10);
+                hw.set_digit(9, self.second % 10);
+            } else {
+                hw.clear_digit(8);
+                hw.clear_digit(9);
             }
-            CalendarField::Second => {
-                hw.set_char(0, b'S');
-                hw.set_char(1, b'E');
-            }
-            CalendarField::Day => {
-                if blink {
-                    let wd = weekday_of(self.year, self.month, self.day);
-                    hw.set_char(0, WEEKDAYS[wd as usize % 7][0]);
-                    hw.set_char(1, WEEKDAYS[wd as usize % 7][1]);
-                } else {
-                    hw.clear_char(0);
-                    hw.clear_char(1);
-                }
-            }
+            return;
         }
 
-        // The big digits show the edited time field while it is the focus and
-        // the year otherwise; while the month is edited they stay on the year
-        // (steady, like the day field) since the abbreviation already moved to
-        // the top letters.
-        match field {
-            CalendarField::Month => self.draw_year(hw),
-            CalendarField::Year => {
-                if blink {
-                    self.draw_year(hw);
-                } else {
-                    hw.clear_digit(4);
-                    hw.clear_digit(5);
-                    hw.clear_digit(6);
-                    hw.clear_digit(7);
-                }
+        // Editing the date keeps the view layout — year in the big digits,
+        // day at 2-3, month at 8-9 — with only the focused value blinking.
+        if field == CalendarField::Year {
+            if blink {
+                self.draw_year(hw);
+            } else {
+                hw.clear_digit(4);
+                hw.clear_digit(5);
+                hw.clear_digit(6);
+                hw.clear_digit(7);
             }
-            CalendarField::Hour => {
-                if blink {
-                    self.draw_time_value(hw, self.hour);
-                } else {
-                    hw.clear_digit(4);
-                    hw.clear_digit(5);
-                    hw.clear_digit(6);
-                    hw.clear_digit(7);
-                }
-            }
-            CalendarField::Minute => {
-                if blink {
-                    self.draw_time_value(hw, self.minute);
-                } else {
-                    hw.clear_digit(4);
-                    hw.clear_digit(5);
-                    hw.clear_digit(6);
-                    hw.clear_digit(7);
-                }
-            }
-            CalendarField::Second => {
-                if blink {
-                    self.draw_time_value(hw, self.second);
-                } else {
-                    hw.clear_digit(4);
-                    hw.clear_digit(5);
-                    hw.clear_digit(6);
-                    hw.clear_digit(7);
-                }
-            }
-            CalendarField::Day => self.draw_year(hw),
+        } else {
+            self.draw_year(hw);
         }
 
-        self.draw_day(hw);
+        if field == CalendarField::Day {
+            if blink {
+                self.draw_day(hw);
+            } else {
+                hw.clear_digit(2);
+                hw.clear_digit(3);
+            }
+        } else {
+            self.draw_day(hw);
+        }
 
-        // The month number in the seconds digits blinks in sync with the
-        // month abbreviation in the top letters while the month is the focus.
-        if matches!(field, CalendarField::Month) {
+        if field == CalendarField::Month {
             if blink {
                 self.draw_month(hw);
             } else {
